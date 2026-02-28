@@ -1,0 +1,607 @@
+---
+title: "Content Moderation"
+description: "Detect and filter inappropriate content using Prism's moderation API"
+---
+
+## Overview
+
+Prism's moderation API helps you detect potentially harmful or inappropriate content in text and images. Use it to:
+- Filter user-generated content
+- Ensure compliance with content policies
+- Protect your community from harmful content
+- Flag content for human review
+- Maintain brand safety
+
+Use `Prism::moderation()` to check content against various safety categories.
+
+<Note>
+Check the [provider documentation](/providers/overview) to see which providers support moderation and what categories they check.
+</Note>
+
+## Basic Usage
+
+### Moderating Text
+
+Check a single text input for inappropriate content:
+
+```php
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Text to moderate')
+    ->asModeration();
+
+if ($response->isFlagged()) {
+    echo "Content was flagged as inappropriate";
+}
+```
+
+### Moderating Multiple Inputs
+
+Check multiple pieces of content in a single request:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput(
+        'First text to check',
+        'Second text to check',
+        'Third text to check'
+    )
+    ->asModeration();
+
+// Check each result
+foreach ($response->results as $index => $result) {
+    if ($result->flagged) {
+        echo "Input {$index} was flagged\n";
+    }
+}
+```
+
+### Using Array Input
+
+Pass multiple inputs as an array:
+
+```php
+$comments = [
+    'Great product!',
+    'This is spam content',
+    'Helpful review'
+];
+
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput($comments)
+    ->asModeration();
+
+foreach ($response->results as $index => $result) {
+    if ($result->flagged) {
+        Comment::find($commentIds[$index])->delete();
+    }
+}
+```
+
+## Moderating Images
+
+Some providers support moderating images for inappropriate visual content:
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::moderation()
+    ->using('your-provider', 'moderation-model')
+    ->withInput(Image::fromLocalPath('/path/to/image.jpg'))
+    ->asModeration();
+
+if ($response->isFlagged()) {
+    echo "Image contains inappropriate content";
+}
+```
+
+### Multiple Images
+
+Moderate multiple images at once:
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$images = [
+    Image::fromLocalPath('/path/to/image1.jpg'),
+    Image::fromLocalPath('/path/to/image2.jpg'),
+    Image::fromUrl('https://example.com/image3.jpg')
+];
+
+$response = Prism::moderation()
+    ->using('your-provider', 'moderation-model')
+    ->withInput($images)
+    ->asModeration();
+
+foreach ($response->results as $index => $result) {
+    if ($result->flagged) {
+        echo "Image {$index} was flagged\n";
+    }
+}
+```
+
+### Loading Images
+
+Prism supports multiple ways to load images for moderation:
+
+<CodeGroup>
+```php Local Path
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromLocalPath('/path/to/image.jpg');
+```
+
+```php Storage Disk
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromStoragePath(
+    path: 'uploads/image.jpg',
+    diskName: 's3'  // optional
+);
+```
+
+```php URL
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromUrl('https://example.com/image.jpg');
+```
+
+```php Base64
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromBase64(
+    base64: $base64String,
+    mimeType: 'image/jpeg'
+);
+```
+</CodeGroup>
+
+## Mixing Text and Images
+
+Moderate both text and images in a single request:
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::moderation()
+    ->using('your-provider', 'moderation-model')
+    ->withInput(
+        'Text content to moderate',
+        Image::fromLocalPath('/path/to/image.jpg'),
+        'More text content'
+    )
+    ->asModeration();
+
+foreach ($response->results as $result) {
+    if ($result->flagged) {
+        // Handle flagged content
+    }
+}
+```
+
+## Understanding Results
+
+### Moderation Results
+
+Each result contains detailed information about the moderation check:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Text to moderate')
+    ->asModeration();
+
+$result = $response->results[0];
+
+// Check if content was flagged
+if ($result->flagged) {
+    echo "Content flagged!\n";
+    
+    // Check which categories were triggered
+    foreach ($result->categories as $category => $isFlagged) {
+        if ($isFlagged) {
+            echo "Flagged for: {$category}\n";
+            
+            // Get the confidence score
+            $score = $result->categoryScores[$category];
+            echo "Confidence: {$score}\n";
+        }
+    }
+}
+```
+
+### Common Categories
+
+Typical moderation categories include (varies by provider):
+
+- `hate`: Hate speech or discriminatory content
+- `harassment`: Harassing or bullying content
+- `self-harm`: Content promoting self-harm
+- `sexual`: Sexual content
+- `violence`: Violent or graphic content
+- `spam`: Spam or unwanted commercial content
+
+<Info>
+Category names and availability vary by provider. Check your provider's documentation for the exact categories they support.
+</Info>
+
+### Response Methods
+
+The `Response` object provides convenient methods:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Text 1', 'Text 2', 'Text 3')
+    ->asModeration();
+
+// Check if any content was flagged
+if ($response->isFlagged()) {
+    echo "Some content was flagged\n";
+}
+
+// Get the first flagged result
+$firstFlagged = $response->firstFlagged();
+if ($firstFlagged) {
+    echo "First flagged content found\n";
+}
+
+// Get all flagged results
+$allFlagged = $response->flagged();
+echo "Flagged " . count($allFlagged) . " items\n";
+
+// Access all results (flagged and clean)
+foreach ($response->results as $result) {
+    // Process each result
+}
+```
+
+## Provider-Specific Options
+
+Configure provider-specific behavior:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Content to moderate')
+    ->withProviderOptions([
+        // Provider-specific options
+    ])
+    ->asModeration();
+```
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```php
+    // OpenAI moderation (minimal options needed)
+    $response = Prism::moderation()
+        ->using('openai', 'text-moderation-latest')
+        ->withInput('Text to moderate')
+        ->asModeration();
+    
+    // Use stable model for consistent results
+    $response = Prism::moderation()
+        ->using('openai', 'text-moderation-stable')
+        ->withInput('Text to moderate')
+        ->asModeration();
+    ```
+  </Tab>
+  
+  <Tab title="Custom Providers">
+    ```php
+    // Check provider documentation for available options
+    $response = Prism::moderation()
+        ->using('your-provider', 'moderation-model')
+        ->withInput('Content to check')
+        ->withProviderOptions([
+            // Threshold settings
+            // Category filters
+            // Language settings
+        ])
+        ->asModeration();
+    ```
+  </Tab>
+</Tabs>
+
+## Response Metadata
+
+Access provider information and raw response data:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Text to moderate')
+    ->asModeration();
+
+// Provider details
+echo "Provider: {$response->meta->provider}\n";
+echo "Model: {$response->meta->model}\n";
+
+// Raw response from provider
+$rawData = $response->raw;
+```
+
+## Converting to Array
+
+Serialize the response for storage or logging:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Text to moderate')
+    ->asModeration();
+
+$array = $response->toArray();
+// Returns:
+// [
+//   'results' => [
+//     [
+//       'flagged' => true/false,
+//       'categories' => [...],
+//       'category_scores' => [...]
+//     ],
+//     ...
+//   ],
+//   'meta' => [...],
+//   'raw' => [...]
+// ]
+```
+
+## Client Configuration
+
+### HTTP Options
+
+Configure HTTP client behavior:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Content to moderate')
+    ->withClientOptions([
+        'timeout' => 60,
+        'connect_timeout' => 10
+    ])
+    ->asModeration();
+```
+
+### Retry Configuration
+
+Configure automatic retries:
+
+```php
+$response = Prism::moderation()
+    ->using('openai', 'text-moderation-latest')
+    ->withInput('Content to moderate')
+    ->withClientRetry(
+        times: 3,
+        sleepMilliseconds: 1000
+    )
+    ->asModeration();
+```
+
+## Error Handling
+
+Handle errors when moderating content:
+
+```php
+use Illuminate\Http\Client\RequestException;
+use Prism\Prism\Exceptions\PrismException;
+
+try {
+    $response = Prism::moderation()
+        ->using('openai', 'text-moderation-latest')
+        ->withInput('Content to moderate')
+        ->asModeration();
+    
+    if ($response->isFlagged()) {
+        // Handle flagged content
+    }
+} catch (PrismException $e) {
+    // Handle Prism errors (e.g., no input provided)
+    echo "Error: {$e->getMessage()}";
+} catch (RequestException $e) {
+    // Handle API errors
+    echo "API error: {$e->getMessage()}";
+}
+```
+
+## Common Use Cases
+
+<Tabs>
+  <Tab title="User Comments">
+    ```php
+    // Moderate user comments before publishing
+    Route::post('/comments', function (Request $request) {
+        $content = $request->input('comment');
+        
+        $response = Prism::moderation()
+            ->using('openai', 'text-moderation-latest')
+            ->withInput($content)
+            ->asModeration();
+        
+        if ($response->isFlagged()) {
+            return response()->json([
+                'error' => 'Your comment was flagged for moderation',
+                'categories' => array_keys(
+                    array_filter($response->results[0]->categories)
+                )
+            ], 422);
+        }
+        
+        // Save comment if clean
+        Comment::create(['content' => $content]);
+        
+        return response()->json(['success' => true]);
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Batch Moderation">
+    ```php
+    // Moderate multiple items efficiently
+    $pendingComments = Comment::where('moderated', false)
+        ->limit(100)
+        ->get();
+    
+    $response = Prism::moderation()
+        ->using('openai', 'text-moderation-latest')
+        ->withInput(
+            $pendingComments->pluck('content')->toArray()
+        )
+        ->asModeration();
+    
+    foreach ($response->results as $index => $result) {
+        $comment = $pendingComments[$index];
+        
+        if ($result->flagged) {
+            $comment->update([
+                'status' => 'rejected',
+                'flagged_categories' => array_keys(
+                    array_filter($result->categories)
+                )
+            ]);
+        } else {
+            $comment->update([
+                'status' => 'approved',
+                'moderated' => true
+            ]);
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Image Uploads">
+    ```php
+    // Moderate user-uploaded images
+    Route::post('/upload', function (Request $request) {
+        $uploadedFile = $request->file('image');
+        $tempPath = $uploadedFile->getRealPath();
+        
+        $response = Prism::moderation()
+            ->using('your-provider', 'image-moderation')
+            ->withInput(
+                Image::fromLocalPath($tempPath)
+            )
+            ->asModeration();
+        
+        if ($response->isFlagged()) {
+            return response()->json([
+                'error' => 'Image contains inappropriate content'
+            ], 422);
+        }
+        
+        // Store image if clean
+        $path = $uploadedFile->store('images', 's3');
+        
+        return response()->json([
+            'path' => $path,
+            'url' => Storage::disk('s3')->url($path)
+        ]);
+    });
+    ```
+  </Tab>
+  
+  <Tab title="Queue Processing">
+    ```php
+    // Process moderation asynchronously
+    class ModerateContentJob implements ShouldQueue
+    {
+        public function __construct(
+            public string $content,
+            public string $modelType,
+            public int $modelId
+        ) {}
+        
+        public function handle()
+        {
+            $response = Prism::moderation()
+                ->using('openai', 'text-moderation-latest')
+                ->withInput($this->content)
+                ->asModeration();
+            
+            $model = $this->modelType::find($this->modelId);
+            
+            if ($response->isFlagged()) {
+                $result = $response->firstFlagged();
+                
+                $model->update([
+                    'moderation_status' => 'flagged',
+                    'flagged_categories' => array_keys(
+                        array_filter($result->categories)
+                    ),
+                    'category_scores' => $result->categoryScores
+                ]);
+                
+                // Notify moderators
+                Notification::send(
+                    User::moderators()->get(),
+                    new ContentFlaggedNotification($model)
+                );
+            } else {
+                $model->update([
+                    'moderation_status' => 'approved'
+                ]);
+            }
+        }
+    }
+    
+    // Dispatch the job
+    ModerateContentJob::dispatch($content, Comment::class, $commentId);
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+1. **Always moderate user content**: Check all user-generated content before publishing
+2. **Batch requests**: Moderate multiple items in a single request to reduce API calls
+3. **Set appropriate thresholds**: Tune your response based on category scores, not just flags
+4. **Human review**: Flag borderline content for human moderation rather than auto-rejecting
+5. **Provide feedback**: Let users know why their content was flagged
+6. **Log decisions**: Keep records of moderation decisions for compliance and improvement
+7. **Regular testing**: Test your moderation pipeline with various content types
+
+## Input Validation
+
+The moderation API requires at least one input:
+
+```php
+use Prism\Prism\Exceptions\PrismException;
+
+try {
+    // This will throw an exception
+    $response = Prism::moderation()
+        ->using('openai', 'text-moderation-latest')
+        ->asModeration();
+} catch (PrismException $e) {
+    echo $e->getMessage(); // "Moderation input is required"
+}
+```
+
+<Warning>
+Always provide at least one input (text or image) before calling `asModeration()`, or a `PrismException` will be thrown.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Text Generation" icon="message" href="/core-concepts/text-generation">
+    Generate and moderate AI-generated text
+  </Card>
+  
+  <Card title="Image Generation" icon="image" href="/multi-modal/images">
+    Generate and moderate AI-generated images
+  </Card>
+  
+  <Card title="Testing" icon="flask" href="/advanced/testing">
+    Test your moderation logic
+  </Card>
+  
+  <Card title="Providers" icon="plug" href="/providers/overview">
+    Learn about provider-specific moderation features
+  </Card>
+</CardGroup>

@@ -1,0 +1,475 @@
+---
+title: "Audio Processing"
+description: "Convert text to speech and transcribe audio files using Prism's audio API"
+---
+
+## Overview
+
+Prism provides a unified API for audio processing with two main capabilities:
+- **Text-to-Speech (TTS)**: Convert text into spoken audio
+- **Speech-to-Text (STT)**: Transcribe audio files into text
+
+Use `Prism::audio()` to access both features with a simple, fluent interface.
+
+<Note>
+Check the [provider documentation](/providers/overview) to see which providers support audio processing and what models are available.
+</Note>
+
+## Text-to-Speech
+
+Convert text into natural-sounding speech audio.
+
+### Basic Usage
+
+```php
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::audio()
+    ->using('openai', 'tts-1')
+    ->withInput('Hello, welcome to Prism!')
+    ->withVoice('alloy')
+    ->asAudio();
+
+$audio = $response->audio;
+```
+
+### Available Voices
+
+Different providers offer different voice options:
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```php
+    // OpenAI TTS voices: alloy, echo, fable, onyx, nova, shimmer
+    $response = Prism::audio()
+        ->using('openai', 'tts-1-hd')
+        ->withInput('This is a test of different voices')
+        ->withVoice('nova')
+        ->asAudio();
+    ```
+  </Tab>
+  
+  <Tab title="Other Providers">
+    ```php
+    // Check your provider's documentation for available voices
+    $response = Prism::audio()
+        ->using('your-provider', 'model-name')
+        ->withInput('Text to convert')
+        ->withVoice('voice-id')
+        ->asAudio();
+    ```
+  </Tab>
+</Tabs>
+
+### Configuring TTS Options
+
+Use provider-specific options for advanced control:
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'tts-1')
+    ->withInput('Welcome to our application!')
+    ->withVoice('alloy')
+    ->withProviderOptions([
+        'speed' => 1.0,        // Speech speed (0.25 to 4.0)
+        'response_format' => 'mp3'  // Audio format
+    ])
+    ->asAudio();
+```
+
+### Saving Audio Output
+
+Save generated audio to a file:
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'tts-1')
+    ->withInput('This will be saved as audio')
+    ->withVoice('echo')
+    ->asAudio();
+
+$audio = $response->audio;
+
+if ($audio->base64) {
+    $audioContent = base64_decode($audio->base64);
+    file_put_contents('/path/to/output.mp3', $audioContent);
+}
+```
+
+## Speech-to-Text
+
+Transcribe audio files into text with high accuracy.
+
+### Basic Usage
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromLocalPath('/path/to/audio.mp3'))
+    ->asText();
+
+echo $response->text;
+```
+
+### Loading Audio Files
+
+Prism supports multiple ways to load audio files:
+
+<CodeGroup>
+```php Local Path
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromLocalPath('/path/to/recording.mp3'))
+    ->asText();
+```
+
+```php Storage Disk
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromStoragePath(
+        path: 'recordings/audio.mp3',
+        diskName: 's3'  // optional, null for default disk
+    ))
+    ->asText();
+```
+
+```php URL
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromUrl('https://example.com/audio.mp3'))
+    ->asText();
+```
+
+```php Base64
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$audioContent = file_get_contents('/path/to/audio.mp3');
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromBase64(
+        base64_encode($audioContent),
+        mimeType: 'audio/mpeg'
+    ))
+    ->asText();
+```
+
+```php Raw Content
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$audioContent = file_get_contents('/path/to/audio.mp3');
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromRawContent(
+        rawContent: $audioContent,
+        mimeType: 'audio/mpeg'
+    ))
+    ->asText();
+```
+</CodeGroup>
+
+### Transcription Options
+
+Configure transcription behavior with provider options:
+
+```php
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromLocalPath('/path/to/audio.mp3'))
+    ->withProviderOptions([
+        'language' => 'en',           // Language code (optional)
+        'prompt' => 'Custom context', // Context for better accuracy
+        'temperature' => 0.0          // Sampling temperature
+    ])
+    ->asText();
+
+echo $response->text;
+```
+
+### Supported Audio Formats
+
+Common audio formats supported include:
+
+- MP3 (`audio/mpeg`)
+- MP4 (`audio/mp4`)
+- WAV (`audio/wav`, `audio/x-wav`)
+- WebM (`audio/webm`)
+- FLAC (`audio/flac`)
+- AAC (`audio/aac`)
+- OGG (`audio/ogg`)
+
+<Info>
+Format support varies by provider. Check your provider's documentation for the complete list of supported formats.
+</Info>
+
+## Response Objects
+
+### Audio Response (TTS)
+
+The `AudioResponse` object contains the generated audio:
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'tts-1')
+    ->withInput('Hello world')
+    ->withVoice('alloy')
+    ->asAudio();
+
+// Access the audio object
+$audio = $response->audio;
+
+// Base64-encoded audio data
+$base64Audio = $audio->base64;
+
+// Audio type/format
+$audioType = $audio->type;
+
+// Convert to array
+$array = $response->toArray();
+```
+
+### Text Response (STT)
+
+The `TextResponse` object contains the transcribed text:
+
+```php
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromLocalPath('/path/to/audio.mp3'))
+    ->asText();
+
+// Transcribed text
+$transcription = $response->text;
+
+// Usage information (if provided by the provider)
+if ($response->usage) {
+    echo "Duration: {$response->usage->audioDuration} seconds";
+}
+
+// Additional provider data
+$additionalData = $response->additionalContent;
+
+// Convert to array
+$array = $response->toArray();
+```
+
+## Provider-Specific Options
+
+Different providers offer unique features and options:
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```php
+    // Text-to-Speech with OpenAI
+    $response = Prism::audio()
+        ->using('openai', 'tts-1-hd')
+        ->withInput('High quality audio')
+        ->withVoice('nova')
+        ->withProviderOptions([
+            'speed' => 1.25,
+            'response_format' => 'opus'
+        ])
+        ->asAudio();
+    
+    // Speech-to-Text with OpenAI Whisper
+    $response = Prism::audio()
+        ->using('openai', 'whisper-1')
+        ->withInput(Audio::fromLocalPath('/path/to/audio.mp3'))
+        ->withProviderOptions([
+            'language' => 'en',
+            'prompt' => 'Technical discussion about AI',
+            'temperature' => 0.2
+        ])
+        ->asText();
+    ```
+  </Tab>
+  
+  <Tab title="Custom Providers">
+    ```php
+    // Check your provider's documentation for available options
+    $response = Prism::audio()
+        ->using('your-provider', 'model-name')
+        ->withInput('Text or Audio')
+        ->withProviderOptions([
+            // Provider-specific options here
+        ])
+        ->asAudio(); // or ->asText()
+    ```
+  </Tab>
+</Tabs>
+
+## Client Configuration
+
+### HTTP Options
+
+Configure HTTP client behavior for audio requests:
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput(Audio::fromLocalPath('/path/to/large-file.mp3'))
+    ->withClientOptions([
+        'timeout' => 300,          // 5 minutes for large files
+        'connect_timeout' => 30
+    ])
+    ->asText();
+```
+
+### Retry Configuration
+
+Configure automatic retries for transient failures:
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'tts-1')
+    ->withInput('Retry if needed')
+    ->withVoice('alloy')
+    ->withClientRetry(
+        times: 3,
+        sleepMilliseconds: 1000
+    )
+    ->asAudio();
+```
+
+## Error Handling
+
+Handle errors gracefully when processing audio:
+
+```php
+use Illuminate\Http\Client\RequestException;
+use InvalidArgumentException;
+
+try {
+    $response = Prism::audio()
+        ->using('openai', 'whisper-1')
+        ->withInput(Audio::fromLocalPath('/path/to/audio.mp3'))
+        ->asText();
+    
+    echo "Transcription: {$response->text}";
+} catch (InvalidArgumentException $e) {
+    // Handle invalid input (e.g., wrong media type)
+    echo "Invalid input: {$e->getMessage()}";
+} catch (RequestException $e) {
+    // Handle API errors
+    echo "API error: {$e->getMessage()}";
+}
+```
+
+## Common Use Cases
+
+<Tabs>
+  <Tab title="Voice Assistants">
+    ```php
+    // Process user voice input and generate audio response
+    use Prism\Prism\ValueObjects\Media\Audio;
+    
+    // 1. Transcribe user's voice command
+    $transcription = Prism::audio()
+        ->using('openai', 'whisper-1')
+        ->withInput(Audio::fromLocalPath('/tmp/user-voice.mp3'))
+        ->asText();
+    
+    // 2. Process the command (your business logic here)
+    $responseText = processCommand($transcription->text);
+    
+    // 3. Generate audio response
+    $audioResponse = Prism::audio()
+        ->using('openai', 'tts-1')
+        ->withInput($responseText)
+        ->withVoice('nova')
+        ->asAudio();
+    ```
+  </Tab>
+  
+  <Tab title="Podcast Transcription">
+    ```php
+    // Transcribe podcast episodes for searchability
+    use Prism\Prism\ValueObjects\Media\Audio;
+    
+    $episode = Audio::fromStoragePath(
+        path: 'podcasts/episode-123.mp3',
+        diskName: 's3'
+    );
+    
+    $response = Prism::audio()
+        ->using('openai', 'whisper-1')
+        ->withInput($episode)
+        ->withProviderOptions([
+            'language' => 'en',
+            'temperature' => 0.0  // More deterministic
+        ])
+        ->asText();
+    
+    // Save transcription to database
+    Podcast::find(123)->update([
+        'transcript' => $response->text
+    ]);
+    ```
+  </Tab>
+  
+  <Tab title="Accessibility">
+    ```php
+    // Convert written content to audio for accessibility
+    $article = Article::find($id);
+    
+    $response = Prism::audio()
+        ->using('openai', 'tts-1-hd')
+        ->withInput($article->content)
+        ->withVoice('echo')
+        ->withProviderOptions([
+            'speed' => 0.9,  // Slightly slower for clarity
+            'response_format' => 'mp3'
+        ])
+        ->asAudio();
+    
+    // Save audio version
+    $audioContent = base64_decode($response->audio->base64);
+    Storage::disk('public')->put(
+        "articles/{$id}/audio.mp3",
+        $audioContent
+    );
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+1. **Choose the right model**: Use `tts-1` for speed or `tts-1-hd` for quality in OpenAI
+2. **Validate input types**: Ensure you use string input for TTS and Audio objects for STT
+3. **Handle large files**: Increase timeouts for processing long audio files
+4. **Specify MIME types**: Always provide MIME types when using base64 or raw content
+5. **Optimize costs**: Be aware that audio processing can be expensive for long files
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Image Generation" icon="image" href="/multi-modal/images">
+    Generate images from text descriptions
+  </Card>
+  
+  <Card title="Embeddings" icon="vector-square" href="/multi-modal/embeddings">
+    Generate vector embeddings for text and images
+  </Card>
+  
+  <Card title="Input Modalities" icon="waveform" href="/multi-modal/audio">
+    Learn about using audio in text generation
+  </Card>
+  
+  <Card title="Providers" icon="plug" href="/providers/overview">
+    Explore provider-specific audio features
+  </Card>
+</CardGroup>

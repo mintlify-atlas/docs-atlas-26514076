@@ -1,0 +1,347 @@
+---
+title: Messages
+description: Build conversational AI applications with structured message handling for multi-turn interactions
+---
+
+Messages are the building blocks of conversations in Prism. They allow you to create interactive, context-aware AI applications by maintaining conversation history and structuring interactions between users and AI assistants.
+
+## Message types
+
+Prism provides four message types to represent different participants and actions in a conversation:
+
+### UserMessage
+
+Represents input from the user. Supports text content and multi-modal attachments like images, documents, audio, and video.
+
+```php
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+use Prism\Prism\ValueObjects\Media\Image;
+
+// Simple text message
+$message = new UserMessage('What is the weather like today?');
+
+// Message with image
+$message = new UserMessage(
+    content: 'What objects do you see in this image?',
+    additionalContent: [
+        Image::fromLocalPath('/path/to/image.jpg')
+    ]
+);
+```
+
+**Available methods:**
+- `text()` - Get all text content from the message
+- `images()` - Get all image attachments
+- `documents()` - Get all document attachments
+- `audios()` - Get all audio attachments
+- `videos()` - Get all video attachments
+- `media()` - Get all audio/video/media attachments
+
+### AssistantMessage
+
+Represents responses from the AI assistant. Can include text content and tool calls.
+
+```php
+use Prism\Prism\ValueObjects\Messages\AssistantMessage;
+
+// Simple assistant response
+$message = new AssistantMessage('The weather is sunny and 72°F.');
+
+// Response with tool calls
+$message = new AssistantMessage(
+    content: 'Let me check the weather for you.',
+    toolCalls: [$weatherToolCall]
+);
+```
+
+### SystemMessage
+
+Sets the behavior and context for the AI. Used to give the assistant instructions or a persona.
+
+```php
+use Prism\Prism\ValueObjects\Messages\SystemMessage;
+
+$message = new SystemMessage(
+    'You are an expert mathematician who explains concepts simply.'
+);
+```
+
+<Note>
+Some providers, like Anthropic, do not support the `SystemMessage` type. Prism automatically converts `SystemMessage` to `UserMessage` for these providers.
+</Note>
+
+### ToolResultMessage
+
+Contains the results from tool executions. Used to pass tool outputs back to the AI.
+
+```php
+use Prism\Prism\ValueObjects\Messages\ToolResultMessage;
+use Prism\Prism\ValueObjects\ToolResult;
+
+$message = new ToolResultMessage([
+    new ToolResult(
+        toolCallId: 'call_123',
+        toolName: 'get_weather',
+        result: 'Weather in Paris: 72°F, sunny'
+    )
+]);
+```
+
+## Building conversations
+
+Use message chains to create multi-turn conversations with context:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+use Prism\Prism\ValueObjects\Messages\AssistantMessage;
+use Prism\Prism\ValueObjects\Messages\SystemMessage;
+
+$response = Prism::text()
+    ->using('anthropic', 'claude-3-5-sonnet-20241022')
+    ->withMessages([
+        new SystemMessage('You are a helpful coding assistant.'),
+        new UserMessage('What is a closure in PHP?'),
+        new AssistantMessage('A closure is an anonymous function that can access variables from the parent scope...'),
+        new UserMessage('Can you show me an example?')
+    ])
+    ->asText();
+```
+
+## Multi-modal messages
+
+UserMessages support multiple types of media attachments:
+
+```php
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+use Prism\Prism\ValueObjects\Media\Image;
+use Prism\Prism\ValueObjects\Media\Document;
+use Prism\Prism\ValueObjects\Media\Audio;
+use Prism\Prism\ValueObjects\Media\Video;
+
+// Image analysis
+$message = new UserMessage(
+    content: 'Describe what you see',
+    additionalContent: [
+        Image::fromLocalPath('/path/to/photo.jpg')
+    ]
+);
+
+// Document processing
+$message = new UserMessage(
+    content: 'Summarize this document',
+    additionalContent: [
+        Document::fromLocalPath('/path/to/report.pdf')
+    ]
+);
+
+// Audio transcription (Gemini)
+$message = new UserMessage(
+    content: 'What is being discussed?',
+    additionalContent: [
+        Audio::fromLocalPath('/path/to/recording.mp3')
+    ]
+);
+
+// Video analysis (Gemini)
+$message = new UserMessage(
+    content: 'Describe what happens in this video',
+    additionalContent: [
+        Video::fromUrl('https://example.com/video.mp4')
+    ]
+);
+
+// Multiple media types
+$message = new UserMessage(
+    content: 'Compare this chart with the report',
+    additionalContent: [
+        Image::fromLocalPath('/path/to/chart.png'),
+        Document::fromLocalPath('/path/to/report.pdf')
+    ]
+);
+```
+
+## Working with message content
+
+Extract specific content types from UserMessages:
+
+```php
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+
+$message = new UserMessage(
+    content: 'Analyze this data',
+    additionalContent: [
+        Image::fromLocalPath('/path/to/chart.png'),
+        Document::fromLocalPath('/path/to/data.pdf')
+    ]
+);
+
+// Get all text content
+$text = $message->text();
+
+// Get all images
+$images = $message->images();
+foreach ($images as $image) {
+    echo $image->mimeType;
+}
+
+// Get all documents
+$documents = $message->documents();
+
+// Get all audio files
+$audios = $message->audios();
+
+// Get all video files
+$videos = $message->videos();
+
+// Get all audio/video/media
+$media = $message->media();
+```
+
+## Message serialization
+
+All message types implement the `Arrayable` interface for easy serialization:
+
+```php
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+
+$message = new UserMessage('Hello, AI!');
+
+$array = $message->toArray();
+// [
+//     'type' => 'user',
+//     'content' => 'Hello, AI!',
+//     'additional_content' => [...],
+//     'additional_attributes' => []
+// ]
+```
+
+## Provider-specific options
+
+Messages support provider-specific options through the `HasProviderOptions` trait:
+
+```php
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+
+$message = new UserMessage('Analyze this');
+$message->withProviderOptions([
+    'cache_control' => ['type' => 'ephemeral']
+]);
+```
+
+This is useful for features like Anthropic's prompt caching or other provider-specific capabilities.
+
+## Accessing response messages
+
+After generation, you can access the complete message history:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\ValueObjects\Messages\AssistantMessage;
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+
+$response = Prism::text()
+    ->using('anthropic', 'claude-3-5-sonnet-20241022')
+    ->withPrompt('Tell me a joke')
+    ->asText();
+
+// Access all messages including the response
+foreach ($response->responseMessages as $message) {
+    if ($message instanceof UserMessage) {
+        echo "User: {$message->text()}\n";
+    }
+    
+    if ($message instanceof AssistantMessage) {
+        echo "Assistant: {$message->content}\n";
+    }
+}
+```
+
+## Best practices
+
+### Maintain conversation context
+
+When building chat applications, persist the message history to maintain context across requests:
+
+```php
+// Load previous messages from database
+$previousMessages = Conversation::find($conversationId)
+    ->messages
+    ->map(fn ($msg) => match($msg->role) {
+        'user' => new UserMessage($msg->content),
+        'assistant' => new AssistantMessage($msg->content),
+        'system' => new SystemMessage($msg->content),
+    })
+    ->toArray();
+
+// Add new user message
+$messages = array_merge($previousMessages, [
+    new UserMessage($userInput)
+]);
+
+$response = Prism::text()
+    ->using('anthropic', 'claude-3-5-sonnet-20241022')
+    ->withMessages($messages)
+    ->asText();
+```
+
+### Use system messages effectively
+
+Set clear instructions and behavior at the start of conversations:
+
+```php
+$messages = [
+    new SystemMessage(
+        'You are a helpful customer support agent. ' .
+        'Be concise, friendly, and always ask clarifying questions when needed.'
+    ),
+    new UserMessage('I have a problem with my order')
+];
+```
+
+### Handle tool interactions
+
+When using tools, include both AssistantMessages with tool calls and ToolResultMessages:
+
+```php
+use Prism\Prism\ValueObjects\Messages\AssistantMessage;
+use Prism\Prism\ValueObjects\Messages\ToolResultMessage;
+use Prism\Prism\ValueObjects\ToolResult;
+
+$messages = [
+    new UserMessage('What\'s the weather in Paris?'),
+    new AssistantMessage(
+        content: 'Let me check that for you.',
+        toolCalls: [$weatherToolCall]
+    ),
+    new ToolResultMessage([
+        new ToolResult(
+            toolCallId: 'call_123',
+            toolName: 'get_weather',
+            result: '72°F, sunny'
+        )
+    ])
+];
+```
+
+## Alternative: Simple prompts
+
+For simple, single-turn interactions, you can use `withPrompt()` instead of building message arrays:
+
+```php
+// Simple approach
+$response = Prism::text()
+    ->using('anthropic', 'claude-3-5-sonnet-20241022')
+    ->withPrompt('Explain quantum computing')
+    ->asText();
+
+// Equivalent with messages
+$response = Prism::text()
+    ->using('anthropic', 'claude-3-5-sonnet-20241022')
+    ->withMessages([
+        new UserMessage('Explain quantum computing')
+    ])
+    ->asText();
+```
+
+See the [Text generation](/core-concepts/text-generation) documentation for more details on using prompts vs messages.

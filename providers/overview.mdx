@@ -1,0 +1,342 @@
+---
+title: 'Provider Overview'
+description: 'Compare features and capabilities across all supported LLM providers'
+---
+
+Prism supports 12 different LLM providers, each with unique capabilities and features. This page helps you choose the right provider for your needs.
+
+## Supported Providers
+
+Prism integrates with the following providers:
+
+<CardGroup cols={3}>
+  <Card title="Anthropic" icon="message-bot" href="/providers/anthropic">
+    Claude models with extended thinking, prompt caching, and citations
+  </Card>
+  <Card title="OpenAI" icon="openai" href="/providers/openai">
+    GPT models with reasoning, image generation, and audio processing
+  </Card>
+  <Card title="Google Gemini" icon="google" href="/providers/gemini">
+    Multimodal models with search grounding and video analysis
+  </Card>
+  <Card title="Ollama" icon="server" href="/providers/ollama">
+    Local model deployment for privacy and offline use
+  </Card>
+  <Card title="Mistral" icon="m" href="/providers/mistral">
+    Magistral reasoning models with OCR capabilities
+  </Card>
+  <Card title="Groq" icon="bolt" href="/providers/groq">
+    Ultra-fast LPU inference for real-time applications
+  </Card>
+  <Card title="DeepSeek" icon="code" href="/providers/deepseek">
+    Efficient models optimized for coding tasks
+  </Card>
+  <Card title="xAI" icon="x-twitter" href="/providers/xai">
+    Grok models with extended thinking capabilities
+  </Card>
+  <Card title="OpenRouter" icon="route" href="/providers/openrouter">
+    Access multiple providers through a single API
+  </Card>
+  <Card title="ElevenLabs" icon="microphone" href="/providers/elevenlabs">
+    Speech-to-text with diarization and event tagging
+  </Card>
+  <Card title="VoyageAI" icon="ship" href="/providers/voyageai">
+    Specialized embeddings for search and retrieval
+  </Card>
+</CardGroup>
+
+## Feature Comparison
+
+Compare capabilities across providers to find the best fit for your use case:
+
+### Core Features
+
+| Provider | Text Generation | Streaming | Structured Output | Tool Calling | Embeddings |
+|----------|----------------|-----------|-------------------|--------------|------------|
+| **Anthropic** | ✅ | ✅ | ✅ (Native + Tool) | ✅ | ❌ |
+| **OpenAI** | ✅ | ✅ | ✅ (Strict mode) | ✅ | ✅ |
+| **Gemini** | ✅ | ✅ | ✅ (Native) | ✅ | ✅ |
+| **Ollama** | ✅ | ✅ | ✅ (Prompt-based) | ✅ | ✅ |
+| **Mistral** | ✅ | ✅ | ✅ | ✅ | ✅ |
+| **Groq** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **DeepSeek** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **xAI** | ✅ | ✅ | ✅ (Strict mode) | ✅ | ❌ |
+| **OpenRouter** | ✅ | ✅ | ✅ | ✅ | ❌ |
+| **ElevenLabs** | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **VoyageAI** | ❌ | ❌ | ❌ | ❌ | ✅ |
+
+### Multimodal Support
+
+| Provider | Images | Audio (STT) | Audio (TTS) | Video | Documents | Image Generation |
+|----------|--------|-------------|-------------|-------|-----------|------------------|
+| **Anthropic** | ✅ | ❌ | ❌ | ❌ | ✅ (PDF) | ❌ |
+| **OpenAI** | ✅ | ✅ (Whisper) | ✅ | ❌ | ❌ | ✅ (DALL-E) |
+| **Gemini** | ✅ | ✅ | ❌ | ✅ (YouTube) | ✅ | ✅ (Imagen) |
+| **Ollama** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Mistral** | ✅ | ✅ (Voxtral) | ❌ | ❌ | ✅ (URL) | ❌ |
+| **Groq** | ✅ | ✅ (Whisper) | ✅ (PlayAI) | ❌ | ❌ | ❌ |
+| **DeepSeek** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **xAI** | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **OpenRouter** | ✅ | ❌ | ❌ | ✅ | ✅ | ❌ |
+| **ElevenLabs** | ❌ | ✅ (Scribe) | ❌ | ❌ | ❌ | ❌ |
+| **VoyageAI** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+### Advanced Capabilities
+
+| Provider | Reasoning/Thinking | Prompt Caching | Citations | Code Execution | Search Grounding | Moderation |
+|----------|-------------------|----------------|-----------|----------------|------------------|------------|
+| **Anthropic** | ✅ (Extended) | ✅ (Ephemeral) | ✅ | ✅ | ❌ | ❌ |
+| **OpenAI** | ✅ (GPT-5) | ✅ (Auto) | ❌ | ✅ | ❌ | ✅ |
+| **Gemini** | ✅ (Thinking) | ✅ | ✅ | ❌ | ✅ (Google) | ❌ |
+| **Ollama** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Mistral** | ✅ (Magistral) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **Groq** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **DeepSeek** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **xAI** | ✅ (Extended) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **OpenRouter** | ✅ (Model-dependent) | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **ElevenLabs** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| **VoyageAI** | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+
+## Configuration
+
+All providers are configured in `config/prism.php`:
+
+```php
+return [
+    'providers' => [
+        'openai' => [
+            'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
+            'api_key' => env('OPENAI_API_KEY', ''),
+            'organization' => env('OPENAI_ORGANIZATION', null),
+            'project' => env('OPENAI_PROJECT', null),
+        ],
+        'anthropic' => [
+            'api_key' => env('ANTHROPIC_API_KEY', ''),
+            'version' => env('ANTHROPIC_API_VERSION', '2023-06-01'),
+            'url' => env('ANTHROPIC_URL', 'https://api.anthropic.com/v1'),
+            'default_thinking_budget' => env('ANTHROPIC_DEFAULT_THINKING_BUDGET', 1024),
+            'anthropic_beta' => env('ANTHROPIC_BETA', null),
+        ],
+        'gemini' => [
+            'api_key' => env('GEMINI_API_KEY', ''),
+            'url' => env('GEMINI_URL', 'https://generativelanguage.googleapis.com/v1beta/models'),
+        ],
+        // ... other providers
+    ],
+];
+```
+
+## Choosing a Provider
+
+### For Production Applications
+
+<Tabs>
+  <Tab title="Best Overall">
+    **Anthropic Claude** - Industry-leading reasoning, long context windows, and reliable structured output with prompt caching for cost optimization.
+    
+    ```php
+    Prism::text()
+        ->using('anthropic', 'claude-sonnet-4-5-20250929')
+        ->withPrompt('Your prompt')
+        ->asText();
+    ```
+  </Tab>
+  
+  <Tab title="Multimodal">
+    **Google Gemini** - Best for video analysis, search grounding, and multimodal applications with native structured output.
+    
+    ```php
+    Prism::text()
+        ->using('gemini', 'gemini-2.5-flash')
+        ->withPrompt('Analyze this video', [Video::fromUrl($url)])
+        ->asText();
+    ```
+  </Tab>
+  
+  <Tab title="Speed">
+    **Groq** - Ultra-fast inference with LPU architecture, ideal for real-time applications and high-throughput workloads.
+    
+    ```php
+    Prism::text()
+        ->using('groq', 'llama-3.3-70b-versatile')
+        ->withPrompt('Your prompt')
+        ->asText();
+    ```
+  </Tab>
+  
+  <Tab title="Privacy">
+    **Ollama** - Run models locally for complete data privacy and offline operation.
+    
+    ```php
+    Prism::text()
+        ->using('ollama', 'llama3.2')
+        ->withPrompt('Your prompt')
+        ->asText();
+    ```
+  </Tab>
+</Tabs>
+
+### For Specific Use Cases
+
+<AccordionGroup>
+  <Accordion title="Complex Reasoning Tasks">
+    Use providers with reasoning/thinking capabilities:
+    - **Anthropic Claude 3.7** - Extended thinking with budget control
+    - **OpenAI GPT-5** - Reasoning effort levels (low/medium/high)
+    - **Mistral Magistral** - Efficient reasoning for complex problems
+    - **xAI Grok** - Extended thinking mode
+    
+    ```php
+    Prism::text()
+        ->using('anthropic', 'claude-3-7-sonnet-latest')
+        ->withProviderOptions(['thinking' => ['enabled' => true]])
+        ->withPrompt('Solve this complex problem...')
+        ->asText();
+    ```
+  </Accordion>
+  
+  <Accordion title="Audio Processing">
+    **Speech-to-Text:**
+    - **OpenAI Whisper** (via OpenAI/Groq) - Industry standard
+    - **Mistral Voxtral** - Multilingual with 30min support
+    - **ElevenLabs Scribe** - Diarization and event tagging
+    
+    **Text-to-Speech:**
+    - **OpenAI TTS** - Natural voices with HD quality
+    - **Groq PlayAI** - Fast TTS with Arabic support
+  </Accordion>
+  
+  <Accordion title="Image Generation">
+    - **OpenAI DALL-E 3** - Highest quality with prompt revision
+    - **OpenAI GPT-Image-1** - Advanced editing with masks
+    - **Gemini Imagen 4** - HD generation with aspect ratio control
+  </Accordion>
+  
+  <Accordion title="Embeddings">
+    - **VoyageAI** - Specialized for search/retrieval tasks
+    - **OpenAI** - General purpose embeddings
+    - **Gemini** - Task-specific embeddings
+  </Accordion>
+  
+  <Accordion title="Cost Optimization">
+    - **Anthropic** - Prompt caching (5m/1h TTL)
+    - **OpenAI** - Automatic caching for structured output
+    - **Gemini** - Content caching with custom TTL
+  </Accordion>
+  
+  <Accordion title="Multiple Providers">
+    **OpenRouter** - Access multiple providers through a single API with automatic fallback routing.
+    
+    ```php
+    Prism::text()
+        ->using('openrouter', 'openai/gpt-4o')
+        ->withProviderOptions([
+            'models' => ['anthropic/claude-sonnet-4.5', 'openai/gpt-4o-mini']
+        ])
+        ->asText();
+    ```
+  </Accordion>
+</AccordionGroup>
+
+## Provider Reliability
+
+### Structured Output Reliability
+
+**Native Support (Most Reliable):**
+- Anthropic (Claude Sonnet 4.5+, Opus 4.1+)
+- OpenAI (with strict mode)
+- Gemini (native structured output)
+- xAI (strict mode)
+
+**Tool Calling Mode (Reliable):**
+- Anthropic (non-native models)
+- OpenRouter
+
+**Prompt-based (Less Reliable):**
+- Ollama
+- DeepSeek
+
+### Message Order Requirements
+
+<Warning>
+**Anthropic** is strict about message order: must alternate User → Assistant → User. Other providers are more flexible.
+</Warning>
+
+## Quick Start by Provider
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+// Anthropic Claude
+$response = Prism::text()
+    ->using(Provider::Anthropic, 'claude-sonnet-4-5-20250929')
+    ->withPrompt('Hello!')
+    ->asText();
+
+// OpenAI GPT
+$response = Prism::text()
+    ->using(Provider::OpenAI, 'gpt-4o')
+    ->withPrompt('Hello!')
+    ->asText();
+
+// Google Gemini
+$response = Prism::text()
+    ->using(Provider::Gemini, 'gemini-2.5-flash')
+    ->withPrompt('Hello!')
+    ->asText();
+
+// Ollama (Local)
+$response = Prism::text()
+    ->using(Provider::Ollama, 'llama3.2')
+    ->withClientOptions(['timeout' => 60])
+    ->withPrompt('Hello!')
+    ->asText();
+
+// Mistral
+$response = Prism::text()
+    ->using(Provider::Mistral, 'mistral-large-latest')
+    ->withPrompt('Hello!')
+    ->asText();
+
+// Groq (Fast)
+$response = Prism::text()
+    ->using(Provider::Groq, 'llama-3.3-70b-versatile')
+    ->withPrompt('Hello!')
+    ->asText();
+
+// DeepSeek
+$response = Prism::text()
+    ->using(Provider::DeepSeek, 'deepseek-chat')
+    ->withPrompt('Hello!')
+    ->asText();
+
+// xAI Grok
+$response = Prism::text()
+    ->using(Provider::XAI, 'grok-4')
+    ->withPrompt('Hello!')
+    ->asText();
+
+// OpenRouter (Multi-provider)
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/gpt-4o')
+    ->withPrompt('Hello!')
+    ->asText();
+```
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Provider Details" icon="book" href="/providers/anthropic">
+    Explore detailed documentation for each provider
+  </Card>
+  <Card title="Core Concepts" icon="brain" href="/core-concepts/text-generation">
+    Learn about text generation, streaming, and tools
+  </Card>
+  <Card title="Structured Output" icon="brackets-curly" href="/core-concepts/structured-output">
+    Generate type-safe structured data
+  </Card>
+  <Card title="Multimodal Input" icon="images" href="/multi-modal/images">
+    Work with images, audio, video, and documents
+  </Card>
+</CardGroup>

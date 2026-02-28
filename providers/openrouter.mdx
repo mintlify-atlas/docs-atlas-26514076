@@ -1,0 +1,288 @@
+---
+title: 'OpenRouter'
+description: 'Access multiple AI providers through a single unified API with automatic fallback routing'
+---
+
+OpenRouter provides access to multiple AI models through a single API. This provider allows you to use various models from different providers through OpenRouter's routing system.
+
+## Configuration
+
+```php
+'openrouter' => [
+    'api_key' => env('OPENROUTER_API_KEY'),
+    'url' => env('OPENROUTER_URL', 'https://openrouter.ai/api/v1'),
+    'site' => [
+        'http_referer' => env('OPENROUTER_SITE_HTTP_REFERER'),
+        'x_title' => env('OPENROUTER_SITE_X_TITLE'),
+    ],
+],
+```
+
+## Environment Variables
+
+Set your OpenRouter API key and URL in your `.env` file:
+
+```env
+OPENROUTER_API_KEY=your_api_key_here
+OPENROUTER_URL=https://openrouter.ai/api/v1
+OPENROUTER_SITE_HTTP_REFERER=https://your-site.example
+OPENROUTER_SITE_X_TITLE="Your Site Name"
+```
+
+## Text Generation
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/gpt-4-turbo')
+    ->withPrompt('Tell me a story about AI.')
+    ->asText();
+
+echo $response->text;
+```
+
+## Structured Output
+
+<Note>
+OpenRouter uses OpenAI-compatible structured outputs. For strict schema validation, the root schema should be an `ObjectSchema`.
+</Note>
+
+```php
+use Prism\Prism\Schema\ObjectSchema;
+use Prism\Prism\Schema\StringSchema;
+
+$schema = new ObjectSchema('person', 'Person information', [
+    new StringSchema('name', 'The person\'s name'),
+    new StringSchema('occupation', 'The person\'s occupation'),
+]);
+
+$response = Prism::structured()
+    ->using(Provider::OpenRouter, 'openai/gpt-4-turbo')
+    ->withPrompt('Generate a person profile for John Doe.')
+    ->withSchema($schema)
+    ->asStructured();
+
+dump($response->structured);
+```
+
+## Tool Calling
+
+```php
+use Prism\Prism\Tool;
+
+$weatherTool = Tool::as('get_weather')
+    ->for('Get the current weather for a location')
+    ->withStringParameter('location', 'The location to get weather for')
+    ->using(function (string $location) {
+        return "The weather in {$location} is sunny and 72°F";
+    });
+
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/gpt-4-turbo')
+    ->withPrompt('What is the weather like in New York?')
+    ->withTools([$weatherTool])
+    ->asText();
+```
+
+## Multimodal Support
+
+### Images
+
+OpenRouter keeps the OpenAI content-part schema, so you can mix text and images:
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/gpt-4o-mini')
+    ->withPrompt('Describe the key trends in this diagram.', [
+        Image::fromLocalPath('storage/charts/retention.png'),
+    ])
+    ->asText();
+```
+
+<Info>
+`Image` value objects are serialized into the `image_url` entries that OpenRouter expects.
+</Info>
+
+### Documents
+
+OpenRouter supports sending documents (PDFs) to compatible models:
+
+```php
+use Prism\Prism\ValueObjects\Media\Document;
+
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'anthropic/claude-sonnet-4')
+    ->withPrompt('Summarize this document.', [
+        Document::fromUrl('https://example.com/report.pdf', 'report.pdf'),
+    ])
+    ->asText();
+```
+
+<Info>
+`Document` value objects support URLs and base64-encoded content. File IDs and chunks are not supported via OpenRouter.
+</Info>
+
+### Videos
+
+OpenRouter supports sending video files to compatible models (like Gemini):
+
+```php
+use Prism\Prism\ValueObjects\Media\Video;
+
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'google/gemini-3-flash-preview')
+    ->withPrompt('Describe what happens in this video.', [
+        Video::fromLocalPath('/path/to/video.mp4'),
+    ])
+    ->asText();
+```
+
+You can also use YouTube URLs with Gemini models:
+
+```php
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'google/gemini-3-flash-preview')
+    ->withPrompt('Summarize this video.', [
+        Video::fromUrl('https://www.youtube.com/watch?v=dQw4w9WgXcQ'),
+    ])
+    ->asText();
+```
+
+<Note>
+Video support varies by model. Check [OpenRouter's models page](https://openrouter.ai/models?input_modalities=video) for models with video input support.
+</Note>
+
+## Streaming
+
+```php
+use Prism\Prism\Enums\StreamEventType;
+
+$stream = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/gpt-4-turbo')
+    ->withPrompt('Tell me a long story about AI.')
+    ->asStream();
+
+foreach ($stream as $event) {
+    if ($event->type() === StreamEventType::TextDelta) {
+        echo $event->delta;
+    }
+}
+```
+
+<Note>
+OpenRouter keeps SSE connections alive by emitting comment events such as `: OPENROUTER PROCESSING`. These lines are safe to ignore while parsing the stream.
+</Note>
+
+<Warning>
+Mid-stream failures propagate as normal SSE payloads with `error` details and `finish_reason: "error"` while the HTTP status remains 200. Make sure to inspect each chunk for an `error` field.
+</Warning>
+
+## Reasoning/Thinking Tokens
+
+Some models (like OpenAI's o1 series) support reasoning tokens that show the model's thought process:
+
+```php
+use Prism\Prism\Enums\StreamEventType;
+
+$stream = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/o1-preview')
+    ->withPrompt('Solve this complex math problem: What is the derivative of x^3 + 2x^2 - 5x + 1?')
+    ->asStream();
+
+foreach ($stream as $event) {
+    if ($event->type() === StreamEventType::ThinkingDelta) {
+        echo "Thinking: " . $event->delta . "\n";
+    } elseif ($event->type() === StreamEventType::TextDelta) {
+        echo $event->delta;
+    }
+}
+```
+
+### Reasoning Effort
+
+Control how much reasoning the model performs:
+
+```php
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/gpt-5-mini')
+    ->withPrompt('Write a PHP function to implement a binary search algorithm')
+    ->withProviderOptions([
+        'reasoning' => [
+            'effort' => 'high',        // "high", "medium", or "low" (OpenAI-style)
+            'max_tokens' => 2000,      // Specific token limit (Gemini/Anthropic-style)
+            'exclude' => false,        // Set to true to exclude reasoning from response
+            'enabled' => true          // Default: inferred from `effort` or `max_tokens`
+        ]
+    ])
+    ->asText();
+```
+
+## Provider Routing & Advanced Options
+
+Use `withProviderOptions()` to forward OpenRouter-specific controls:
+
+```php
+$response = Prism::text()
+    ->using(Provider::OpenRouter, 'openai/gpt-4o')
+    ->withPrompt('Draft a concise product changelog entry.')
+    ->withProviderOptions([
+        // https://openrouter.ai/docs/model-routing
+        'models' => [
+            'anthropic/claude-sonnet-4.5',
+            'openai/gpt-4o-mini',
+        ],
+        'top_k' => 40,
+    ])
+    ->asText();
+```
+
+<Info>
+The values you supply are passed directly to OpenRouter. Consult the [Parameters reference](https://openrouter.ai/docs/api-reference/parameters) and [Provider Routing guide](https://openrouter.ai/docs/provider-routing) for the full list of supported keys.
+</Info>
+
+The single `model` parameter and the fallback `models` array work together. When both are present, OpenRouter first tries the `model` value, then walks the `models` list in order. Fallbacks trigger for moderation flags, context-length errors, rate limits, or provider downtime.
+
+## Available Models
+
+OpenRouter supports many models from different providers. The [Models API](https://openrouter.ai/docs/overview/models) returns structured metadata. Some popular options include:
+
+- `x-ai/grok-code-fast-1`
+- `anthropic/claude-sonnet-4.5`
+- `google/gemini-2.5-flash`
+- `deepseek/deepseek-chat-v3-0324`
+- `z-ai/glm-4.6`
+- `tngtech/deepseek-r1t2-chimera:free`
+- `qwen/qwen3-coder-30b-a3b-instruct`
+- `mistralai/mistral-nemo`
+
+Visit [OpenRouter's models page](https://openrouter.ai/models) for a complete list.
+
+## Features
+
+- ✅ Text Generation
+- ✅ Structured Output
+- ✅ Tool Calling
+- ✅ Multiple Model Support
+- ✅ Provider Routing
+- ✅ Streaming
+- ✅ Reasoning/Thinking Tokens (for compatible models)
+- ✅ Image Support
+- ✅ Video Support
+- ✅ Document Support
+- ❌ Embeddings (not yet implemented)
+- ❌ Image Generation (not yet implemented)
+
+## Error Handling
+
+The OpenRouter provider includes standard error handling for common issues:
+
+- Rate limiting
+- Request too large
+- Provider overload
+- Invalid API key
+
+Errors are automatically mapped to appropriate Prism exceptions for consistent error handling across all providers.

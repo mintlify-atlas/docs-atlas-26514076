@@ -1,0 +1,294 @@
+---
+title: 'VoyageAI'
+description: 'Specialized embeddings optimized for search and retrieval tasks'
+---
+
+## Configuration
+
+```php
+'voyageai' => [
+    'api_key' => env('VOYAGEAI_API_KEY', ''),
+    'url' => env('VOYAGEAI_URL', 'https://api.voyageai.com/v1'),
+],
+```
+
+## Basic Usage
+
+VoyageAI specializes in generating high-quality embeddings for semantic search and retrieval:
+
+```php
+use Prism\Prism\Enums\Provider;
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::embeddings()
+    ->using(Provider::VoyageAI, 'voyage-3-lite')
+    ->fromInput('The food was delicious and the waiter was very friendly.')
+    ->asEmbeddings();
+
+// Access the embedding vector
+$embedding = $response->embeddings->first()->embedding;
+```
+
+## Provider-Specific Options
+
+### Input Type
+
+By default, VoyageAI generates general purpose vectors. However, they tailor your vectors for the task they are intended for - for search ("query") or for retrieval ("document"):
+
+#### For Search / Querying
+
+```php
+use Prism\Prism\Enums\Provider;
+use Prism\Prism\Facades\Prism;
+
+Prism::embeddings()
+    ->using(Provider::VoyageAI, 'voyage-3-lite')
+    ->fromInput('best restaurants in San Francisco')
+    ->withProviderOptions(['inputType' => 'query'])
+    ->asEmbeddings();
+```
+
+#### For Document Retrieval
+
+```php
+Prism::embeddings()
+    ->using(Provider::VoyageAI, 'voyage-3-lite')
+    ->fromInput('The food was delicious and the waiter was very friendly.')
+    ->withProviderOptions(['inputType' => 'document'])
+    ->asEmbeddings();
+```
+
+### Truncation
+
+By default, VoyageAI truncates inputs that are over the context length. You can force it to throw an error instead by setting truncation to false:
+
+```php
+Prism::embeddings()
+    ->using(Provider::VoyageAI, 'voyage-3-lite')
+    ->fromInput('Your very long text here...')
+    ->withProviderOptions(['truncation' => false])
+    ->asEmbeddings();
+```
+
+## Use Cases
+
+### Semantic Search
+
+VoyageAI embeddings excel at semantic search applications:
+
+```php
+use Prism\Prism\Facades\Prism;
+
+// Index documents
+$documents = [
+    'Laravel is a PHP web framework',
+    'Vue.js is a JavaScript framework',
+    'Python is a programming language',
+];
+
+$documentEmbeddings = [];
+foreach ($documents as $doc) {
+    $response = Prism::embeddings()
+        ->using('voyageai', 'voyage-3')
+        ->fromInput($doc)
+        ->withProviderOptions(['inputType' => 'document'])
+        ->asEmbeddings();
+    
+    $documentEmbeddings[] = [
+        'text' => $doc,
+        'embedding' => $response->embeddings->first()->embedding,
+    ];
+}
+
+// Search with a query
+$queryResponse = Prism::embeddings()
+    ->using('voyageai', 'voyage-3')
+    ->fromInput('PHP frameworks')
+    ->withProviderOptions(['inputType' => 'query'])
+    ->asEmbeddings();
+
+$queryEmbedding = $queryResponse->embeddings->first()->embedding;
+
+// Calculate similarity and find best match
+// (use cosine similarity or your preferred metric)
+```
+
+### Batch Processing
+
+Process multiple texts efficiently:
+
+```php
+$texts = [
+    'First document to embed',
+    'Second document to embed',
+    'Third document to embed',
+];
+
+$response = Prism::embeddings()
+    ->using('voyageai', 'voyage-3-lite')
+    ->fromInput($texts)
+    ->withProviderOptions(['inputType' => 'document'])
+    ->asEmbeddings();
+
+foreach ($response->embeddings as $index => $embedding) {
+    echo "Embedding for: {$texts[$index]}\n";
+    // Store $embedding->embedding in your database
+}
+```
+
+### RAG (Retrieval-Augmented Generation)
+
+Use VoyageAI embeddings for RAG applications:
+
+```php
+// 1. Embed your knowledge base
+$knowledgeBase = [
+    'Laravel provides elegant routing',
+    'Laravel has built-in authentication',
+    'Laravel supports multiple databases',
+];
+
+$embeddedKnowledge = [];
+foreach ($knowledgeBase as $item) {
+    $response = Prism::embeddings()
+        ->using('voyageai', 'voyage-3')
+        ->fromInput($item)
+        ->withProviderOptions(['inputType' => 'document'])
+        ->asEmbeddings();
+    
+    $embeddedKnowledge[] = [
+        'text' => $item,
+        'embedding' => $response->embeddings->first()->embedding,
+    ];
+}
+
+// 2. Embed user query
+$userQuery = 'How does authentication work?';
+$queryResponse = Prism::embeddings()
+    ->using('voyageai', 'voyage-3')
+    ->fromInput($userQuery)
+    ->withProviderOptions(['inputType' => 'query'])
+    ->asEmbeddings();
+
+// 3. Find relevant context (using similarity search)
+// 4. Pass context to your LLM for generation
+```
+
+## Available Models
+
+### Voyage 3 Series
+
+- **voyage-3** - Latest and most capable model
+- **voyage-3-lite** - Faster and more cost-effective
+
+### Voyage 2 Series
+
+- **voyage-2** - Previous generation
+- **voyage-2-lite** - Lighter version
+
+### Specialized Models
+
+- **voyage-code-2** - Optimized for code search
+- **voyage-law-2** - Optimized for legal documents
+- **voyage-finance-2** - Optimized for financial documents
+
+## Best Practices
+
+### Use Appropriate Input Types
+
+```php
+// For indexing documents
+$docResponse = Prism::embeddings()
+    ->using('voyageai', 'voyage-3')
+    ->fromInput($documentText)
+    ->withProviderOptions(['inputType' => 'document'])
+    ->asEmbeddings();
+
+// For search queries
+$queryResponse = Prism::embeddings()
+    ->using('voyageai', 'voyage-3')
+    ->fromInput($searchQuery)
+    ->withProviderOptions(['inputType' => 'query'])
+    ->asEmbeddings();
+```
+
+### Batch When Possible
+
+Process multiple texts in a single request for better performance:
+
+```php
+$response = Prism::embeddings()
+    ->using('voyageai', 'voyage-3-lite')
+    ->fromInput([
+        'Document 1',
+        'Document 2',
+        'Document 3',
+    ])
+    ->withProviderOptions(['inputType' => 'document'])
+    ->asEmbeddings();
+```
+
+### Choose the Right Model
+
+- Use **voyage-3** for highest quality
+- Use **voyage-3-lite** for speed and cost efficiency
+- Use specialized models (code, law, finance) for domain-specific tasks
+
+## Features
+
+- ✅ High-quality embeddings
+- ✅ Task-specific optimization (query vs document)
+- ✅ Batch processing
+- ✅ Multiple specialized models
+- ✅ Customizable truncation behavior
+- ❌ Text generation (not supported)
+- ❌ Image processing (not supported)
+
+## Performance Characteristics
+
+- **voyage-3**: Best quality, higher latency
+- **voyage-3-lite**: Good quality, lower latency
+- **Specialized models**: Optimized for specific domains
+
+## Integration Example
+
+Here's a complete example of building a semantic search system:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Illuminate\Support\Facades\DB;
+
+class DocumentSearchService
+{
+    public function indexDocument(string $content, int $documentId): void
+    {
+        $response = Prism::embeddings()
+            ->using('voyageai', 'voyage-3')
+            ->fromInput($content)
+            ->withProviderOptions(['inputType' => 'document'])
+            ->asEmbeddings();
+        
+        $embedding = $response->embeddings->first()->embedding;
+        
+        DB::table('document_embeddings')->insert([
+            'document_id' => $documentId,
+            'embedding' => json_encode($embedding),
+            'created_at' => now(),
+        ]);
+    }
+    
+    public function search(string $query): array
+    {
+        $response = Prism::embeddings()
+            ->using('voyageai', 'voyage-3')
+            ->fromInput($query)
+            ->withProviderOptions(['inputType' => 'query'])
+            ->asEmbeddings();
+        
+        $queryEmbedding = $response->embeddings->first()->embedding;
+        
+        // Use your database's vector search capabilities
+        // This is a simplified example
+        return $this->findSimilarDocuments($queryEmbedding);
+    }
+}```

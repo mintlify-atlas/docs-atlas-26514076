@@ -1,0 +1,597 @@
+---
+title: 'OpenAI'
+description: 'GPT models with reasoning, strict structured output, and comprehensive audio/image processing'
+---
+
+## Configuration
+
+```php
+'openai' => [
+    'url' => env('OPENAI_URL', 'https://api.openai.com/v1'),
+    'api_key' => env('OPENAI_API_KEY', ''),
+    'organization' => env('OPENAI_ORGANIZATION', null),
+    'project' => env('OPENAI_PROJECT', null),
+]
+```
+
+## Structured Output
+
+### Strict Tool Schemas
+
+Prism supports OpenAI's [function calling with Structured Outputs](https://platform.openai.com/docs/guides/function-calling#function-calling-with-structured-outputs) via provider-specific options:
+
+```php
+Tool::as('search')
+    ->for('Searching the web')
+    ->withStringParameter('query', 'the detailed search query')
+    ->using(fn (): string => '[Search results]')
+    ->withProviderOptions([
+      'strict' => true,
+    ]);
+```
+
+### Strict Structured Output Schemas
+
+```php
+$response = Prism::structured()
+    ->withProviderOptions([
+        'schema' => [
+            'strict' => true
+        ]
+    ])
+```
+
+<Warning>
+**All Fields Must Be Required**: When using structured outputs with OpenAI (especially in strict mode), you must include ALL fields in the `requiredFields` array. Fields that should be optional must be marked with `nullable: true` instead. This is an OpenAI API requirement.
+
+```php
+new ObjectSchema(
+    name: 'user',
+    properties: [
+        new StringSchema('email', 'Email address'),
+        new StringSchema('bio', 'Optional bio', nullable: true),
+    ],
+    requiredFields: ['email', 'bio'] // ✅ All fields listed
+);
+```
+
+For more details on required vs nullable fields, see [Schemas - Required vs Nullable Fields](/core-concepts/schemas#required-vs-nullable-fields).
+</Warning>
+
+### Combining Tools with Structured Output
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Schema\ObjectSchema;
+use Prism\Prism\Schema\StringSchema;
+use Prism\Prism\Tool;
+
+$schema = new ObjectSchema(
+    name: 'weather_analysis',
+    description: 'Analysis of weather conditions',
+    properties: [
+        new StringSchema('summary', 'Summary of the weather'),
+        new StringSchema('recommendation', 'Recommendation based on weather'),
+    ],
+    requiredFields: ['summary', 'recommendation']
+);
+
+$weatherTool = Tool::as('get_weather')
+    ->for('Get current weather for a location')
+    ->withStringParameter('location', 'The city and state')
+    ->using(fn (string $location): string => "Weather in {$location}: 72°F, sunny");
+
+$response = Prism::structured()
+    ->using('openai', 'gpt-4o')
+    ->withSchema($schema)
+    ->withTools([$weatherTool])
+    ->withMaxSteps(3)
+    ->withPrompt('What is the weather in San Francisco and should I wear a coat?')
+    ->asStructured();
+
+// Access structured output
+dump($response->structured);
+
+// Access tool execution details
+foreach ($response->toolCalls as $toolCall) {
+    echo "Called: {$toolCall->name}\n";
+}
+```
+
+<Info>
+When combining tools with structured output, set `maxSteps` to at least 2. OpenAI automatically uses the `/responses` endpoint and sets `parallel_tool_calls: false`.
+</Info>
+
+## Provider-Specific Options
+
+### Metadata
+
+```php
+$response = Prism::text()
+    ->withProviderOptions([
+        'metadata' => [
+            'project_id' => 23
+        ]
+    ])
+```
+
+### Previous Responses
+
+Prism supports OpenAI's [conversation state](https://platform.openai.com/docs/guides/conversation-state#openai-apis-for-conversation-state) with the `previous_response_id` parameter:
+
+```php
+$response = Prism::text()
+    ->withProviderOptions([
+        'previous_response_id' => 'response_id'
+    ])
+```
+
+### Truncation
+
+```php
+$response = Prism::text()
+    ->withProviderOptions([
+        'truncation' => 'auto'
+    ])
+```
+
+### Service Tiers
+
+Prism supports OpenAI's [Service Tier Configuration](https://platform.openai.com/docs/api-reference/chat/create#chat-create-service_tier):
+
+```php
+$response = Prism::text()
+    ->withProviderOptions([
+        'service_tier' => 'priority'
+    ])
+```
+
+<Warning>
+**Priority Service Tiers increase Cost**: Using priority service tier may reduce response time but increases token costs.
+</Warning>
+
+## Reasoning Models
+
+OpenAI's reasoning models like `gpt-5`, `gpt-5-mini`, and `gpt-5-nano` use advanced reasoning capabilities to think through complex problems before responding.
+
+### Reasoning Effort
+
+Control how much reasoning the model performs before generating a response:
+
+```php
+$response = Prism::text()
+    ->using('openai', 'gpt-5')
+    ->withPrompt('Write a PHP function to implement a binary search algorithm with proper error handling')
+    ->withProviderOptions([
+        'reasoning' => ['effort' => 'high']
+    ])
+    ->asText();
+```
+
+Available reasoning effort levels:
+- **`low`**: Faster responses with economical token usage
+- **`medium`**: Balanced approach (default)
+- **`high`**: More thorough reasoning for complex problems
+
+<Note>
+Reasoning models generate internal "reasoning tokens" that help them think through problems. These tokens are included in your usage costs but aren't visible in the response.
+</Note>
+
+### Reasoning Token Usage
+
+You can track reasoning token usage through the response:
+
+```php
+$response = Prism::text()
+    ->using('openai', 'gpt-5-mini')
+    ->withPrompt('Refactor this PHP code to use dependency injection')
+    ->withProviderOptions([
+        'reasoning' => ['effort' => 'medium']
+    ])
+    ->asText();
+
+// Access reasoning token usage
+$usage = $response->firstStep()->usage;
+echo "Reasoning tokens: " . $usage->thoughtTokens;
+echo "Total completion tokens: " . $usage->completionTokens;
+```
+
+### Text Verbosity
+
+```php
+$response = Prism::text()
+    ->using('openai', 'gpt-5')
+    ->withPrompt('Explain dependency injection')
+    ->withProviderOptions([
+        'text_verbosity' => 'low' // low, medium, high
+    ])
+    ->asText();
+```
+
+### Store
+
+```php
+$response = Prism::text()
+    ->using('openai', 'gpt-5')
+    ->withPrompt('Give me a summary of the following legal document')
+    ->withProviderOptions([
+        'store' => false // true, false
+    ])
+    ->asText();
+```
+
+## Streaming
+
+OpenAI supports streaming responses in real-time:
+
+```php
+// Stream events
+$stream = Prism::text()
+    ->using('openai', 'gpt-4o')
+    ->withPrompt('Write a story')
+    ->asStream();
+
+// Server-Sent Events
+return Prism::text()
+    ->using('openai', 'gpt-4o')
+    ->withPrompt(request('message'))
+    ->asEventStreamResponse();
+```
+
+### Streaming Reasoning Models
+
+Reasoning models like `gpt-5` stream their thinking process separately:
+
+```php
+use Prism\Prism\Enums\StreamEventType;
+
+foreach ($stream as $event) {
+    match ($event->type()) {
+        StreamEventType::ThinkingDelta => echo "[Thinking] " . $event->delta,
+        StreamEventType::TextDelta => echo $event->delta,
+        default => null,
+    };
+}
+```
+
+### Streaming with Provider Tools
+
+OpenAI's provider tools like `image_generation` emit streaming events during execution:
+
+```php
+use Prism\Prism\ValueObjects\ProviderTool;
+use Prism\Prism\Streaming\Events\ProviderToolEvent;
+
+$stream = Prism::text()
+    ->using('openai', 'gpt-4o')
+    ->withProviderTools([
+        new ProviderTool('image_generation'),
+    ])
+    ->withPrompt('Generate an image of a sunset over mountains')
+    ->asStream();
+
+foreach ($stream as $event) {
+    if ($event instanceof ProviderToolEvent) {
+        if ($event->status === 'completed' && isset($event->data['result'])) {
+            $imageData = $event->data['result']; // base64 PNG
+            file_put_contents('generated.png', base64_decode($imageData));
+        }
+    }
+}
+```
+
+## Caching
+
+<Warning>
+Automatic caching does not currently work with JsonMode. Please ensure you use StructuredMode if you wish to utilise automatic caching.
+</Warning>
+
+## Provider Tools
+
+OpenAI offers built-in provider tools that can be used alongside your custom tools. For more information, see [Tools & Function Calling](/core-concepts/tools#provider-tools).
+
+### Code Interpreter
+
+The OpenAI code interpreter allows your AI to execute Python code in a secure, sandboxed environment:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\ValueObjects\ProviderTool;
+
+Prism::text()
+    ->using('openai', 'gpt-4.1')
+    ->withPrompt('Solve the equation 3x + 10 = 14.')
+    ->withProviderTools([
+        new ProviderTool(type: 'code_interpreter', options: ['container' => ['type' => 'auto']])
+    ])
+    ->asText();
+```
+
+## Additional Message Attributes
+
+Adding optional parameters to a `UserMessage` like the `name` field can be done through the `additionalAttributes` parameter:
+
+```php
+Prism::text()
+    ->using('openai', 'gpt-4.1')
+    ->withMessages([
+        new UserMessage('Who are you?', additionalAttributes: ['name' => 'TJ']),
+    ])
+    ->asText()
+```
+
+## Image Generation
+
+OpenAI provides powerful image generation capabilities through multiple models.
+
+### Supported Models
+
+| Model | Description |
+|-------|-------------|
+| `dall-e-3` | Latest DALL-E model |
+| `dall-e-2` | Previous generation |
+| `gpt-image-1` | GPT-based image model |
+
+### Basic Usage
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('A serene mountain landscape at sunset')
+    ->generate();
+
+$image = $response->firstImage();
+echo $image->url; // Generated image URL
+```
+
+### DALL-E 3 Options
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('A futuristic cityscape with flying cars')
+    ->withProviderOptions([
+        'size' => '1792x1024',          // 1024x1024, 1024x1792, 1792x1024
+        'quality' => 'hd',              // standard, hd
+        'style' => 'vivid',             // vivid, natural
+    ])
+    ->generate();
+
+// DALL-E 3 automatically revises prompts
+if ($response->firstImage()->hasRevisedPrompt()) {
+    echo "Revised prompt: " . $response->firstImage()->revisedPrompt;
+}
+```
+
+### DALL-E 2 Options
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-2')
+    ->withPrompt('Abstract geometric patterns')
+    ->withProviderOptions([
+        'n' => 4,                       // Number of images (1-10)
+        'size' => '1024x1024',          // 256x256, 512x512, 1024x1024
+        'response_format' => 'url',
+        'user' => 'user-123',
+    ])
+    ->generate();
+
+foreach ($response->images as $image) {
+    echo "Image: {$image->url}\n";
+}
+```
+
+### GPT-Image-1 Options
+
+```php
+$response = Prism::image()
+    ->using('openai', 'gpt-image-1')
+    ->withPrompt('A detailed architectural rendering of a modern house')
+    ->withProviderOptions([
+        'size' => '1536x1024',
+        'quality' => 'high',                // standard, high
+        'output_format' => 'webp',          // png, webp, jpeg
+        'output_compression' => 85,
+        'background' => 'transparent',      // transparent, white, black
+        'moderation' => true,
+    ])
+    ->generate();
+```
+
+### Image Editing with GPT-Image-1
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::image()
+    ->using('openai', 'gpt-image-1')
+    ->withPrompt('Add a vaporwave sunset to the background', [
+        Image::fromLocalPath('tests/Fixtures/diamond.png'),
+    ])
+    ->withProviderOptions([
+        'size' => '1024x1024',
+        'output_format' => 'png',
+        'quality' => 'high',
+    ])
+    ->generate();
+
+file_put_contents('edited-image.png', base64_decode($response->firstImage()->base64));
+```
+
+#### Using Masks for Targeted Editing
+
+```php
+$response = Prism::image()
+    ->using('openai', 'gpt-image-1')
+    ->withPrompt('Add a vaporwave sunset to the background', [
+        Image::fromLocalPath('tests/Fixtures/diamond.png'),
+    ])
+    ->withProviderOptions([
+        'mask' => Image::fromLocalPath('tests/Fixtures/diamond-mask.png'),
+        'size' => '1024x1024',
+    ])
+    ->generate();
+```
+
+## Audio Processing
+
+### Text-to-Speech
+
+Convert text into natural-sounding speech:
+
+```php
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::audio()
+    ->using('openai', 'gpt-4o-mini-tts')
+    ->withInput('Hello, welcome to our application!')
+    ->withVoice('alloy')
+    ->asAudio();
+
+// Save the audio file
+$audioData = base64_decode($response->audio->base64);
+file_put_contents('welcome.mp3', $audioData);
+```
+
+#### Audio Format Options
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'gpt-4o-mini-tts')
+    ->withInput('Testing different audio formats.')
+    ->withProviderOptions([
+        'voice' => 'echo',
+        'response_format' => 'opus',   // mp3, opus, aac, flac, wav, pcm
+        'speed' => 1.25,              // Speed: 0.25 to 4.0
+    ])
+    ->asAudio();
+```
+
+### Speech-to-Text
+
+Convert audio files into text using Whisper:
+
+```php
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$audioFile = Audio::fromPath('/path/to/recording.mp3');
+
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput($audioFile)
+    ->asText();
+
+echo "Transcription: " . $response->text;
+```
+
+#### Language Detection
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput($audioFile)
+    ->withProviderOptions([
+        'language' => 'es',           // ISO-639-1 code (optional)
+        'temperature' => 0.2,
+    ])
+    ->asText();
+```
+
+#### Verbose Response with Timestamps
+
+```php
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput($audioFile)
+    ->withProviderOptions([
+        'response_format' => 'verbose_json',
+    ])
+    ->asText();
+
+// Access detailed segment information
+$segments = $response->additionalContent['segments'] ?? [];
+foreach ($segments as $segment) {
+    echo "Text: " . $segment['text'] . "\n";
+    echo "Start: " . $segment['start'] . "s\n";
+    echo "End: " . $segment['end'] . "s\n";
+}
+```
+
+#### Subtitle Generation
+
+```php
+// SRT format
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput($audioFile)
+    ->withProviderOptions(['response_format' => 'srt'])
+    ->asText();
+
+file_put_contents('subtitles.srt', $response->text);
+
+// VTT format
+$response = Prism::audio()
+    ->using('openai', 'whisper-1')
+    ->withInput($audioFile)
+    ->withProviderOptions(['response_format' => 'vtt'])
+    ->asText();
+
+file_put_contents('subtitles.vtt', $response->text);
+```
+
+## Moderation
+
+OpenAI provides content moderation capabilities for text and images.
+
+### Text Moderation
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+$response = Prism::moderation()
+    ->using(Provider::OpenAI)
+    ->withInput('Your text to check goes here')
+    ->asModeration();
+
+if ($response->isFlagged()) {
+    $flagged = $response->firstFlagged();
+    // Handle flagged content
+}
+```
+
+### Image Moderation
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::moderation()
+    ->using(Provider::OpenAI, 'omni-moderation-latest')
+    ->withInput(Image::fromUrl('https://example.com/image.png'))
+    ->asModeration();
+```
+
+### Response Handling
+
+```php
+$response = Prism::moderation()
+    ->using(Provider::OpenAI, 'omni-moderation-latest')
+    ->withInput('Your content here')
+    ->asModeration();
+
+if ($response->isFlagged()) {
+    $flaggedResults = $response->flagged();
+    
+    foreach ($flaggedResults as $result) {
+        $categories = $result->categories;
+        $scores = $result->categoryScores;
+        
+        if ($result->categories['hate'] ?? false) {
+            // Handle hate content
+        }
+    }
+}
+```
+
+For complete moderation documentation, see [Moderation](/multi-modal/moderation).

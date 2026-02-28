@@ -1,0 +1,349 @@
+---
+title: "Image Generation"
+description: "Generate images using AI models with Prism's image generation API"
+---
+
+## Overview
+
+Prism provides a simple API for generating images using AI models from supported providers like OpenAI's DALL-E. The `Prism::image()` method allows you to create images from text descriptions.
+
+<Note>
+Check the [provider documentation](/providers/overview) to see which providers support image generation and what models are available.
+</Note>
+
+## Basic Usage
+
+Generate an image from a text prompt:
+
+```php
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('A serene mountain landscape at sunset')
+    ->generate();
+
+$image = $response->firstImage();
+```
+
+## Configuring the Request
+
+### Selecting Provider and Model
+
+Specify which provider and model to use for image generation:
+
+```php
+use Prism\Prism\Enums\Provider;
+
+$response = Prism::image()
+    ->using(Provider::OpenAI, 'dall-e-3')
+    ->withPrompt('A futuristic city with flying cars')
+    ->generate();
+```
+
+### Adding System Prompts
+
+Provide system-level instructions to guide image generation:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withSystemPrompt('Generate images in a watercolor painting style')
+    ->withPrompt('A forest scene with wildlife')
+    ->generate();
+```
+
+### Including Reference Images
+
+Some providers support using reference images for image editing or variation:
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::image()
+    ->using('openai', 'dall-e-2')
+    ->withPrompt('Add a sunset to this landscape', [
+        Image::fromLocalPath('/path/to/original.png')
+    ])
+    ->generate();
+```
+
+<Info>
+Reference images are filtered automatically - only `Image` media types are included in the request.
+</Info>
+
+## Provider-Specific Options
+
+Configure provider-specific settings using `withProviderOptions()`:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('A minimalist logo design')
+    ->withProviderOptions([
+        'size' => '1024x1024',
+        'quality' => 'hd',
+        'style' => 'vivid'
+    ])
+    ->generate();
+```
+
+<Warning>
+Provider options vary by provider and model. Consult your provider's documentation for available options.
+</Warning>
+
+## Working with Responses
+
+### Accessing Generated Images
+
+The response contains an array of generated images:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('Abstract geometric patterns')
+    ->generate();
+
+// Get the first image
+$image = $response->firstImage();
+
+// Access all images
+foreach ($response->images as $image) {
+    echo $image->url ?? 'No URL';
+}
+
+// Check if images were generated
+if ($response->hasImages()) {
+    echo "Generated {$response->imageCount()} images";
+}
+```
+
+### Image Properties
+
+Each `GeneratedImage` object contains:
+
+<CodeGroup>
+```php URL
+// Image URL (if provided by the provider)
+$url = $image->url;
+```
+
+```php Base64
+// Base64-encoded image data
+$base64 = $image->base64;
+```
+
+```php Revised Prompt
+// Some providers return a revised version of your prompt
+if ($image->hasRevisedPrompt()) {
+    echo "Provider used: {$image->revisedPrompt}";
+}
+```
+
+```php MIME Type
+// Image MIME type
+$mimeType = $image->mimeType;
+```
+</CodeGroup>
+
+### Saving Images
+
+Save generated images to disk:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('A beautiful ocean view')
+    ->generate();
+
+$image = $response->firstImage();
+
+if ($image->url) {
+    // Download from URL
+    $content = file_get_contents($image->url);
+    file_put_contents('/path/to/save/image.png', $content);
+} elseif ($image->base64) {
+    // Decode base64
+    $content = base64_decode($image->base64);
+    file_put_contents('/path/to/save/image.png', $content);
+}
+```
+
+## Usage and Metadata
+
+### Usage Information
+
+Track API usage for your image generation requests:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('Digital art of a robot')
+    ->generate();
+
+echo "Images generated: {$response->usage->imagesGenerated}";
+```
+
+### Response Metadata
+
+Access provider metadata and raw response data:
+
+```php
+// Provider information
+echo "Provider: {$response->meta->provider}";
+echo "Model: {$response->meta->model}";
+
+// Raw response from provider
+$rawData = $response->raw;
+
+// Additional content from provider
+$additionalContent = $response->additionalContent;
+```
+
+## Converting to Array
+
+Convert the response to an array for serialization:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('Futuristic architecture')
+    ->generate();
+
+$array = $response->toArray();
+// Returns:
+// [
+//   'images' => [...],
+//   'usage' => [...],
+//   'meta' => [...],
+//   'additional_content' => [...],
+//   'raw' => [...]
+// ]
+```
+
+## Client Configuration
+
+### HTTP Options
+
+Configure HTTP client behavior:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('A peaceful garden')
+    ->withClientOptions([
+        'timeout' => 120,
+        'connect_timeout' => 30
+    ])
+    ->generate();
+```
+
+### Retry Configuration
+
+Configure automatic retries for failed requests:
+
+```php
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('Abstract art')
+    ->withClientRetry(
+        times: 3,
+        sleepMilliseconds: 1000
+    )
+    ->generate();
+```
+
+## Error Handling
+
+Handle errors gracefully when generating images:
+
+```php
+use Illuminate\Http\Client\RequestException;
+
+try {
+    $response = Prism::image()
+        ->using('openai', 'dall-e-3')
+        ->withPrompt('A fantasy landscape')
+        ->generate();
+    
+    $image = $response->firstImage();
+} catch (RequestException $e) {
+    // Handle API errors
+    echo "Error: {$e->getMessage()}";
+}
+```
+
+## Best Practices
+
+<Tabs>
+  <Tab title="Descriptive Prompts">
+    Use detailed, descriptive prompts for better results:
+    
+    ```php
+    // Good
+    $response = Prism::image()
+        ->withPrompt('A photorealistic portrait of a wise elderly man with a white beard, wearing a blue robe, standing in a medieval library filled with ancient books, warm lighting from candles')
+        ->generate();
+    
+    // Less effective
+    $response = Prism::image()
+        ->withPrompt('Old man in library')
+        ->generate();
+    ```
+  </Tab>
+  
+  <Tab title="Check Image Count">
+    Always verify images were generated:
+    
+    ```php
+    $response = Prism::image()
+        ->using('openai', 'dall-e-3')
+        ->withPrompt('Mountain vista')
+        ->generate();
+    
+    if (!$response->hasImages()) {
+        // Handle no images case
+        throw new Exception('No images were generated');
+    }
+    
+    $image = $response->firstImage();
+    ```
+  </Tab>
+  
+  <Tab title="Provider Options">
+    Research provider-specific options for optimal results:
+    
+    ```php
+    // OpenAI DALL-E 3 options
+    $response = Prism::image()
+        ->using('openai', 'dall-e-3')
+        ->withPrompt('A modern logo')
+        ->withProviderOptions([
+            'size' => '1024x1024',    // Image dimensions
+            'quality' => 'hd',        // 'standard' or 'hd'
+            'style' => 'natural'      // 'vivid' or 'natural'
+        ])
+        ->generate();
+    ```
+  </Tab>
+</Tabs>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Audio Processing" icon="microphone" href="/multi-modal/audio">
+    Convert text to speech or transcribe audio files
+  </Card>
+  
+  <Card title="Embeddings" icon="vector-square" href="/multi-modal/embeddings">
+    Generate vector embeddings for text and images
+  </Card>
+  
+  <Card title="Content Moderation" icon="shield-check" href="/multi-modal/moderation">
+    Check content for safety and compliance
+  </Card>
+  
+  <Card title="Providers" icon="plug" href="/providers/overview">
+    Learn about provider-specific features
+  </Card>
+</CardGroup>

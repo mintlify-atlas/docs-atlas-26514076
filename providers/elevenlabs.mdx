@@ -1,0 +1,213 @@
+---
+title: 'ElevenLabs'
+description: 'Advanced speech-to-text with diarization and audio event tagging'
+---
+
+## Configuration
+
+```php
+'elevenlabs' => [
+    'api_key' => env('ELEVENLABS_API_KEY', ''),
+    'url' => env('ELEVENLABS_URL', 'https://api.elevenlabs.io/v1/'),
+]
+```
+
+## Speech-to-Text
+
+ElevenLabs provides speech-to-text through their Scribe model with support for diarization and audio event tagging.
+
+### Basic Usage
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\ValueObjects\Media\Audio;
+
+$audioFile = Audio::fromPath('/path/to/recording.mp3');
+
+$response = Prism::audio()
+    ->using('elevenlabs', 'scribe_v1')
+    ->withInput($audioFile)
+    ->asText();
+
+echo $response->text;
+```
+
+## Provider-Specific Options
+
+### Language Detection
+
+Specify the language code for better transcription accuracy:
+
+```php
+$response = Prism::audio()
+    ->using('elevenlabs', 'scribe_v1')
+    ->withInput($audioFile)
+    ->withProviderOptions([
+        'language_code' => 'en',
+    ])
+    ->asText();
+```
+
+### Speaker Diarization
+
+ElevenLabs can identify and separate different speakers in the audio:
+
+```php
+$response = Prism::audio()
+    ->using('elevenlabs', 'scribe_v1')
+    ->withInput($audioFile)
+    ->withProviderOptions([
+        'diarize' => true,
+        'num_speakers' => 2,
+    ])
+    ->asText();
+
+// Access speaker information
+$segments = $response->additionalContent['segments'] ?? [];
+foreach ($segments as $segment) {
+    echo "Speaker {$segment['speaker']}: {$segment['text']}\n";
+}
+```
+
+### Audio Event Tagging
+
+Detect non-speech audio events like laughter, applause, or background noise:
+
+```php
+$response = Prism::audio()
+    ->using('elevenlabs', 'scribe_v1')
+    ->withInput($audioFile)
+    ->withProviderOptions([
+        'tag_audio_events' => true,
+    ])
+    ->asText();
+
+// Events are included in the transcription
+echo $response->text;
+// Example: "Hello [LAUGHTER] how are you? [APPLAUSE]"
+```
+
+## Use Cases
+
+### Meeting Transcription with Speaker Identification
+
+```php
+$meetingAudio = Audio::fromPath('/path/to/meeting.mp3');
+
+$response = Prism::audio()
+    ->using('elevenlabs', 'scribe_v1')
+    ->withInput($meetingAudio)
+    ->withProviderOptions([
+        'diarize' => true,
+        'num_speakers' => 4,
+        'language_code' => 'en',
+        'tag_audio_events' => true,
+    ])
+    ->asText();
+
+// Process segments with speaker labels
+$segments = $response->additionalContent['segments'] ?? [];
+foreach ($segments as $segment) {
+    echo "[Speaker {$segment['speaker']}] {$segment['text']}\n";
+}
+```
+
+### Podcast Transcription
+
+```php
+$podcastAudio = Audio::fromUrl('https://example.com/podcast.mp3');
+
+$response = Prism::audio()
+    ->using('elevenlabs', 'scribe_v1')
+    ->withInput($podcastAudio)
+    ->withProviderOptions([
+        'diarize' => true,
+        'num_speakers' => 2,  // Host and guest
+        'tag_audio_events' => true,  // Capture laughter, music, etc.
+    ])
+    ->asText();
+```
+
+### Interview Transcription
+
+```php
+$interviewAudio = Audio::fromPath('/path/to/interview.wav');
+
+$response = Prism::audio()
+    ->using('elevenlabs', 'scribe_v1')
+    ->withInput($interviewAudio)
+    ->withProviderOptions([
+        'diarize' => true,
+        'num_speakers' => 2,
+        'language_code' => 'en',
+    ])
+    ->asText();
+
+// Generate formatted transcript
+$segments = $response->additionalContent['segments'] ?? [];
+$speakers = ['Interviewer', 'Guest'];
+
+foreach ($segments as $segment) {
+    $speakerLabel = $speakers[$segment['speaker'] - 1] ?? "Speaker {$segment['speaker']}";
+    echo "{$speakerLabel}: {$segment['text']}\n\n";
+}
+```
+
+## Audio File Handling
+
+### Supported Formats
+
+ElevenLabs Scribe supports various audio formats:
+
+```php
+use Prism\Prism\ValueObjects\Media\Audio;
+
+// From local file path
+$audio = Audio::fromPath('/path/to/audio.mp3');
+$audio = Audio::fromPath('/path/to/audio.wav');
+$audio = Audio::fromPath('/path/to/audio.m4a');
+
+// From remote URL
+$audio = Audio::fromUrl('https://example.com/recording.mp3');
+
+// From base64 encoded data
+$audio = Audio::fromBase64($base64AudioData, 'audio/mpeg');
+
+// From binary content
+$audioContent = file_get_contents('/path/to/audio.wav');
+$audio = Audio::fromContent($audioContent, 'audio/wav');
+```
+
+## Features
+
+- ✅ Speech-to-Text with high accuracy
+- ✅ Speaker Diarization (identify multiple speakers)
+- ✅ Audio Event Tagging (detect non-speech sounds)
+- ✅ Multi-language support
+- ❌ Text-to-Speech (not yet implemented)
+
+## Best Practices
+
+### For Best Diarization Results
+
+1. Ensure clear audio quality
+2. Minimize background noise
+3. Specify the correct number of speakers
+4. Use a sample rate of at least 16kHz
+
+### For Accurate Transcription
+
+1. Use the correct language code
+2. Ensure good audio quality (clear speech, minimal noise)
+3. Use appropriate audio format (WAV or high-quality MP3)
+4. For long recordings, consider splitting into segments
+
+## Limitations
+
+### Text-to-Speech
+
+ElevenLabs text-to-speech is not yet implemented in Prism. Use OpenAI or Groq for TTS functionality.
+
+### File Size
+
+Check ElevenLabs documentation for current file size limits when processing audio files.

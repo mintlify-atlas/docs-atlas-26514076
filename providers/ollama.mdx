@@ -1,0 +1,123 @@
+---
+title: 'Ollama'
+description: 'Run LLMs locally with complete privacy and offline operation'
+---
+
+## Configuration
+
+```php
+'ollama' => [
+    'url' => env('OLLAMA_URL', 'http://localhost:11434'),
+],
+```
+
+## Ollama Options
+
+Ollama allows you to customize how the model is run via [options](https://github.com/ollama/ollama/blob/main/docs/modelfile.md#parameter). These options can be passed via the `->withProviderOptions()` method:
+
+```php
+Prism::text()
+  ->using(Provider::Ollama, 'gemma3:1b')
+  ->withPrompt('Who are you?')
+  ->withClientOptions(['timeout' => 60])
+  ->withProviderOptions([
+      'top_p' => 0.9,
+      'num_ctx' => 4096,
+  ])
+```
+
+<Note>
+Using `withProviderOptions` will override settings like `topP` and `temperature`
+</Note>
+
+## Streaming
+
+Ollama supports streaming responses from your local models:
+
+```php
+return Prism::text()
+    ->using('ollama', 'llama3.2')
+    ->withPrompt(request('message'))
+    ->withClientOptions(['timeout' => 120])
+    ->asEventStreamResponse();
+```
+
+<Info>
+Remember to increase the timeout for local models to prevent premature disconnection.
+</Info>
+
+For complete streaming documentation, see [Streaming Output](/core-concepts/streaming).
+
+## Considerations
+
+### Timeouts
+
+Depending on your configuration, responses tend to time out. You may need to extend the client's timeout using `->withClientOptions(['timeout' => $seconds])`:
+
+```php
+Prism::text()
+  ->using(Provider::Ollama, 'gemma3:1b')
+  ->withPrompt('Who are you?')
+  ->withClientOptions(['timeout' => 60])
+```
+
+### Structured Output
+
+Ollama doesn't have native JSON mode or structured output like some providers. Prism implements a robust workaround:
+
+- We automatically append instructions to your prompt that guide the model to output valid JSON matching your schema
+- If the response isn't valid JSON, Prism will raise a PrismException
+
+## Limitations
+
+### Image URL
+
+Ollama does not support images using `Image::fromUrl()`.
+
+### Tool Choice
+
+Ollama does not currently support tool choice / required tools.
+
+## Running Local Models
+
+Ollama is perfect for running models locally with complete privacy:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+$response = Prism::text()
+    ->using(Provider::Ollama, 'llama3.2')
+    ->withPrompt('Explain what a Laravel service provider is')
+    ->withClientOptions(['timeout' => 120])
+    ->asText();
+
+echo $response->text;
+```
+
+### Popular Models
+
+Some popular models available through Ollama:
+
+- **llama3.2** - Meta's latest Llama model
+- **gemma3** - Google's Gemma models
+- **mistral** - Mistral AI models
+- **phi3** - Microsoft's Phi-3 models
+- **codellama** - Code-specialized Llama
+
+### Installation
+
+To use Ollama:
+
+1. Install Ollama from [ollama.ai](https://ollama.ai)
+2. Pull a model: `ollama pull llama3.2`
+3. Start the Ollama service
+4. Configure Prism with your local URL
+
+```bash
+# Pull a model
+ollama pull llama3.2
+
+# Verify it's running
+curl http://localhost:11434
+```

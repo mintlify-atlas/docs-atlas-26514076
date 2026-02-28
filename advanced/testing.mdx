@@ -1,0 +1,396 @@
+---
+title: Testing
+description: Learn how to test your Prism integrations using PrismFake and response builders
+---
+
+# Testing
+
+Prism provides comprehensive testing utilities to help you test your AI integrations without making real API calls. The testing system is built around `PrismFake`, which allows you to mock responses and assert on requests.
+
+## Setting Up Fakes
+
+The `Prism::fake()` method creates a fake provider that intercepts all Prism requests and returns your predefined responses.
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Testing\TextResponseFake;
+
+$fake = Prism::fake([
+    TextResponseFake::make()->withText('The meaning of life is 42'),
+]);
+
+$response = Prism::text()
+    ->using('anthropic', 'claude-3-sonnet')
+    ->withPrompt('What is the meaning of life?')
+    ->asText();
+
+expect($response->text)->toBe('The meaning of life is 42');
+```
+
+<Note>
+The fake intercepts requests for **all providers**, so you don't need to specify which provider you're faking.
+</Note>
+
+## Response Fakes
+
+Prism provides fake builders for all response types. Each fake includes fluent methods to customize the response data.
+
+### Text Response Fake
+
+The `TextResponseFake` class lets you create fake text generation responses.
+
+```php
+use Prism\Prism\Testing\TextResponseFake;
+use Prism\Prism\Enums\FinishReason;
+use Prism\Prism\ValueObjects\Usage;
+
+Prism::fake([
+    TextResponseFake::make()
+        ->withText('Hello from fake AI!')
+        ->withFinishReason(FinishReason::Stop)
+        ->withUsage(new Usage(10, 20)),
+]);
+
+$response = Prism::text()
+    ->using('openai', 'gpt-4')
+    ->withPrompt('Say hello')
+    ->asText();
+
+expect($response->text)->toBe('Hello from fake AI!');
+expect($response->usage->promptTokens)->toBe(10);
+expect($response->usage->completionTokens)->toBe(20);
+```
+
+**Available Methods:**
+- `withText(string $text)` - Set the response text
+- `withSteps(Collection $steps)` - Set multi-step responses
+- `withFinishReason(FinishReason $finishReason)` - Set the finish reason
+- `withToolCalls(array $toolCalls)` - Add tool calls to the response
+- `withToolResults(array $toolResults)` - Add tool results
+- `withUsage(Usage $usage)` - Set token usage
+- `withMeta(Meta $meta)` - Set response metadata
+- `withMessages(Collection $messages)` - Set message history
+- `withAdditionalContent(array $content)` - Add provider-specific content
+
+### Structured Response Fake
+
+For testing structured output generation:
+
+```php
+use Prism\Prism\Testing\StructuredResponseFake;
+
+Prism::fake([
+    StructuredResponseFake::make()
+        ->withStructured(['name' => 'John Doe', 'age' => 30])
+        ->withText(json_encode(['name' => 'John Doe', 'age' => 30])),
+]);
+
+$response = Prism::structured()
+    ->using('openai', 'gpt-4')
+    ->withPrompt('Generate a person')
+    ->withSchema($schema)
+    ->asStructured();
+
+expect($response->structured)->toBe(['name' => 'John Doe', 'age' => 30]);
+```
+
+**Available Methods:**
+- `withStructured(array $structured)` - Set the structured data
+- `withText(string $text)` - Set the raw JSON text
+- `withSteps(Collection $steps)` - Set multi-step responses
+- `withFinishReason(FinishReason $finishReason)` - Set the finish reason
+- `withUsage(Usage $usage)` - Set token usage
+- `withMeta(Meta $meta)` - Set response metadata
+
+### Embeddings Response Fake
+
+For testing embedding generation:
+
+```php
+use Prism\Prism\Testing\EmbeddingsResponseFake;
+use Prism\Prism\ValueObjects\Embedding;
+
+Prism::fake([
+    EmbeddingsResponseFake::make()
+        ->withEmbeddings([
+            Embedding::fromArray([0.1, 0.2, 0.3, 0.4]),
+        ]),
+]);
+
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-ada-002')
+    ->fromInput('Hello world')
+    ->asEmbeddings();
+
+expect($response->embeddings[0]->embedding)->toBe([0.1, 0.2, 0.3, 0.4]);
+```
+
+**Available Methods:**
+- `withEmbeddings(array $embeddings)` - Set the embeddings array
+- `withUsage(EmbeddingsUsage $usage)` - Set token usage
+- `withMeta(Meta $meta)` - Set response metadata
+
+### Image Response Fake
+
+For testing image generation:
+
+```php
+use Prism\Prism\Testing\ImageResponseFake;
+use Prism\Prism\ValueObjects\GeneratedImage;
+
+Prism::fake([
+    ImageResponseFake::make()
+        ->withImages([
+            new GeneratedImage(
+                url: 'https://example.com/image.png',
+                revisedPrompt: 'A beautiful sunset'
+            ),
+        ]),
+]);
+
+$response = Prism::image()
+    ->using('openai', 'dall-e-3')
+    ->withPrompt('A sunset')
+    ->asImages();
+
+expect($response->images[0]->url)->toBe('https://example.com/image.png');
+```
+
+## Testing Streaming
+
+PrismFake automatically converts text responses into streaming events when you use `asStream()`.
+
+```php
+use Prism\Prism\Testing\TextResponseFake;
+use Prism\Prism\Streaming\Events\TextDeltaEvent;
+use Prism\Prism\Streaming\Events\StreamEndEvent;
+
+Prism::fake([
+    TextResponseFake::make()->withText('Hello world'),
+]);
+
+$stream = Prism::text()
+    ->using('anthropic', 'claude-3-sonnet')
+    ->withPrompt('Say hello')
+    ->asStream();
+
+$text = '';
+foreach ($stream as $event) {
+    if ($event instanceof TextDeltaEvent) {
+        $text .= $event->delta;
+    }
+}
+
+expect($text)->toBe('Hello world');
+```
+
+<Info>
+By default, PrismFake chunks text into pieces of 5 characters. You can customize this with `withFakeChunkSize()`.
+</Info>
+
+### Customizing Chunk Size
+
+```php
+$fake = Prism::fake([
+    TextResponseFake::make()->withText('Hello world'),
+])->withFakeChunkSize(1); // Chunk character by character
+
+// Now streaming will emit one character at a time
+```
+
+## Multi-Step Responses
+
+For complex scenarios involving tool calls and multiple steps, use `TextStepFake` with the `ResponseBuilder`:
+
+```php
+use Prism\Prism\Text\ResponseBuilder;
+use Prism\Prism\Testing\TextStepFake;
+use Prism\Prism\ValueObjects\ToolCall;
+use Prism\Prism\ValueObjects\ToolResult;
+
+Prism::fake([
+    (new ResponseBuilder)
+        ->addStep(
+            TextStepFake::make()
+                ->withToolCalls([
+                    new ToolCall('call-1', 'get_weather', ['city' => 'Paris']),
+                ])
+        )
+        ->addStep(
+            TextStepFake::make()
+                ->withToolResults([
+                    new ToolResult('call-1', 'get_weather', ['city' => 'Paris'], '22°C and sunny'),
+                ])
+        )
+        ->addStep(
+            TextStepFake::make()
+                ->withText('The weather in Paris is 22°C and sunny.')
+        )
+        ->toResponse(),
+]);
+
+$response = Prism::text()
+    ->using('anthropic', 'claude-3-sonnet')
+    ->withPrompt('What is the weather in Paris?')
+    ->asText();
+
+expect($response->steps)->toHaveCount(3);
+expect($response->text)->toBe('The weather in Paris is 22°C and sunny.');
+```
+
+## Assertions
+
+PrismFake provides several assertion methods to verify your code's behavior.
+
+### Assert Call Count
+
+Verify the number of API calls made:
+
+```php
+$fake = Prism::fake([
+    TextResponseFake::make()->withText('Response 1'),
+    TextResponseFake::make()->withText('Response 2'),
+]);
+
+Prism::text()->using('openai', 'gpt-4')->withPrompt('First')->asText();
+Prism::text()->using('openai', 'gpt-4')->withPrompt('Second')->asText();
+
+$fake->assertCallCount(2);
+```
+
+### Assert Prompt
+
+Check that a specific prompt was sent:
+
+```php
+$fake = Prism::fake([
+    TextResponseFake::make()->withText('Hello!'),
+]);
+
+Prism::text()
+    ->using('openai', 'gpt-4')
+    ->withPrompt('Say hello')
+    ->asText();
+
+$fake->assertPrompt('Say hello');
+```
+
+### Assert Request
+
+Inspect the full request details with a closure:
+
+```php
+use Prism\Prism\Text\Request as TextRequest;
+
+$fake = Prism::fake([
+    TextResponseFake::make()->withText('Hello!'),
+]);
+
+Prism::text()
+    ->using('openai', 'gpt-4')
+    ->withPrompt('Say hello')
+    ->withMaxTokens(100)
+    ->asText();
+
+$fake->assertRequest(function (array $requests) {
+    expect($requests)->toHaveCount(1);
+    expect($requests[0])->toBeInstanceOf(TextRequest::class);
+    expect($requests[0]->maxTokens())->toBe(100);
+});
+```
+
+### Assert Provider Config
+
+Verify provider configuration:
+
+```php
+$fake = Prism::fake([
+    TextResponseFake::make()->withText('Response'),
+]);
+
+Prism::text()
+    ->using('openai', 'gpt-4')
+    ->usingProviderConfig(['api_key' => 'test-key'])
+    ->withPrompt('Test')
+    ->asText();
+
+$fake->assertProviderConfig(['api_key' => 'test-key']);
+```
+
+## Response Sequencing
+
+When you provide multiple responses, PrismFake returns them in sequence:
+
+```php
+Prism::fake([
+    TextResponseFake::make()->withText('First response'),
+    TextResponseFake::make()->withText('Second response'),
+    TextResponseFake::make()->withText('Third response'),
+]);
+
+$first = Prism::text()->using('openai', 'gpt-4')->withPrompt('1')->asText();
+$second = Prism::text()->using('openai', 'gpt-4')->withPrompt('2')->asText();
+$third = Prism::text()->using('openai', 'gpt-4')->withPrompt('3')->asText();
+
+expect($first->text)->toBe('First response');
+expect($second->text)->toBe('Second response');
+expect($third->text)->toBe('Third response');
+```
+
+<Warning>
+If you make more requests than you have fake responses, PrismFake will throw an exception with the message: "Could not find a response for the request".
+</Warning>
+
+## Best Practices
+
+<Steps>
+  <Step title="Use specific fakes">
+    Create separate fake responses for each test case rather than reusing fakes across tests. This makes tests more isolated and maintainable.
+  </Step>
+  
+  <Step title="Test edge cases">
+    Test scenarios like empty responses, rate limits, and errors by customizing the finish reason and response content.
+  </Step>
+  
+  <Step title="Assert on requests">
+    Don't just test the responses - verify that your code sends the correct prompts, parameters, and configuration to Prism.
+  </Step>
+  
+  <Step title="Test streaming separately">
+    Create dedicated tests for streaming behavior to ensure your event handling logic works correctly.
+  </Step>
+</Steps>
+
+## Example: Complete Test
+
+Here's a complete example testing a service that uses Prism:
+
+```php
+use Tests\TestCase;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Testing\TextResponseFake;
+use App\Services\AIAssistant;
+
+class AIAssistantTest extends TestCase
+{
+    public function test_generates_greeting(): void
+    {
+        // Arrange
+        $fake = Prism::fake([
+            TextResponseFake::make()->withText('Hello, John! How can I help?'),
+        ]);
+        
+        $assistant = new AIAssistant();
+        
+        // Act
+        $greeting = $assistant->greet('John');
+        
+        // Assert
+        expect($greeting)->toBe('Hello, John! How can I help?');
+        $fake->assertCallCount(1);
+        $fake->assertRequest(function (array $requests) {
+            expect($requests[0]->prompt())->toContain('John');
+        });
+    }
+}
+```

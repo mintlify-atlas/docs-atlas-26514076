@@ -1,0 +1,487 @@
+---
+title: Provider Interoperability
+description: Learn how to write provider-agnostic code and switch between LLM providers seamlessly
+---
+
+# Provider Interoperability
+
+One of Prism's core strengths is its ability to work with multiple LLM providers through a unified interface. However, different providers have unique capabilities, configuration options, and quirks. Prism provides tools to help you write provider-agnostic code while still taking advantage of provider-specific features when needed.
+
+## The Challenge
+
+When working with multiple LLM providers, you'll encounter:
+
+- Different model capabilities (some support tools, some don't)
+- Provider-specific configuration options (caching, response formats, etc.)
+- Varying API limitations (context windows, token limits)
+- Different pricing structures
+- Unique features (like Anthropic's prompt caching)
+
+Prism helps you navigate these differences while keeping your code clean and maintainable.
+
+## Using whenProvider()
+
+The `whenProvider()` method allows you to conditionally apply configuration based on which provider you're using. This is the key to writing flexible, provider-aware code.
+
+### Basic Usage
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+$response = Prism::text()
+    ->using(Provider::OpenAI, 'gpt-4')
+    ->withPrompt('Who are you?')
+    ->whenProvider(
+        Provider::Anthropic,
+        fn ($request) => $request->withProviderOptions([
+            'cacheType' => 'ephemeral',
+        ])
+    )
+    ->asText();
+```
+
+In this example, the `cacheType` option will only be applied when using Anthropic. When using OpenAI (or any other provider), the `whenProvider()` block is simply skipped.
+
+### How It Works
+
+The `whenProvider()` method:
+1. Checks which provider is currently selected
+2. If it matches the specified provider, executes the closure
+3. If it doesn't match, skips the closure entirely
+4. Returns the request for continued chaining
+
+## Chaining Multiple Providers
+
+You can chain multiple `whenProvider()` calls to handle different providers:
+
+```php
+$response = Prism::text()
+    ->using(Provider::OpenAI, 'gpt-4')
+    ->withPrompt('Generate a creative story about robots.')
+    ->whenProvider(
+        Provider::Anthropic,
+        fn ($request) => $request
+            ->withMaxTokens(4000)
+            ->withProviderOptions(['cacheType' => 'ephemeral'])
+    )
+    ->whenProvider(
+        Provider::OpenAI,
+        fn ($request) => $request
+            ->withMaxTokens(2000)
+            ->withProviderOptions(['response_format' => ['type' => 'text']])
+    )
+    ->whenProvider(
+        Provider::Groq,
+        fn ($request) => $request
+            ->withMaxTokens(1000)
+            ->withTemperature(0.8)
+    )
+    ->asText();
+```
+
+Only the matching provider's configuration will be applied.
+
+## Practical Examples
+
+### Example 1: Provider-Specific Token Limits
+
+Different providers have different token limits. Adjust them automatically:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+function generateLongContent(string $prompt): string
+{
+    $response = Prism::text()
+        ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+        ->withPrompt($prompt)
+        ->whenProvider(
+            Provider::Anthropic,
+            fn ($request) => $request->withMaxTokens(8000)
+        )
+        ->whenProvider(
+            Provider::OpenAI,
+            fn ($request) => $request->withMaxTokens(4000)
+        )
+        ->whenProvider(
+            Provider::Groq,
+            fn ($request) => $request->withMaxTokens(2000)
+        )
+        ->asText();
+    
+    return $response->text;
+}
+```
+
+### Example 2: Cost Optimization
+
+Use cheaper models for simple tasks and more capable models for complex ones:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class AIService
+{
+    public function simpleTask(string $prompt): string
+    {
+        // Use cheaper models for simple tasks
+        $response = Prism::text()
+            ->using(Provider::OpenAI, 'gpt-4o-mini')
+            ->withPrompt($prompt)
+            ->whenProvider(
+                Provider::Anthropic,
+                fn ($request) => $request->using(Provider::Anthropic, 'claude-3-haiku-20240307')
+            )
+            ->asText();
+        
+        return $response->text;
+    }
+    
+    public function complexTask(string $prompt): string
+    {
+        // Use more capable models for complex tasks
+        $response = Prism::text()
+            ->using(Provider::OpenAI, 'gpt-4')
+            ->withPrompt($prompt)
+            ->whenProvider(
+                Provider::Anthropic,
+                fn ($request) => $request->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+            )
+            ->asText();
+        
+        return $response->text;
+    }
+}
+```
+
+### Example 3: Provider-Specific Features
+
+Leverage unique features like Anthropic's prompt caching:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+function analyzeWithContext(string $largeContext, string $question): string
+{
+    $response = Prism::text()
+        ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+        ->withSystemPrompt($largeContext)
+        ->withPrompt($question)
+        ->whenProvider(
+            Provider::Anthropic,
+            fn ($request) => $request->withProviderOptions([
+                'cacheType' => 'ephemeral',
+            ])
+        )
+        ->asText();
+    
+    return $response->text;
+}
+```
+
+### Example 4: Temperature Tuning Per Provider
+
+Different providers respond differently to temperature settings:
+
+```php
+function generateCreativeContent(string $prompt): string
+{
+    $response = Prism::text()
+        ->using(Provider::OpenAI, 'gpt-4')
+        ->withPrompt($prompt)
+        ->whenProvider(
+            Provider::OpenAI,
+            fn ($request) => $request->withTemperature(0.9)
+        )
+        ->whenProvider(
+            Provider::Anthropic,
+            fn ($request) => $request->withTemperature(0.8)
+        )
+        ->whenProvider(
+            Provider::Groq,
+            fn ($request) => $request->withTemperature(1.0)
+        )
+        ->asText();
+    
+    return $response->text;
+}
+```
+
+## Using Invokable Classes
+
+For complex provider configurations, create reusable invokable classes:
+
+```php
+use Prism\Prism\Text\PendingRequest;
+
+class AnthropicCachingConfig
+{
+    public function __invoke(PendingRequest $request): PendingRequest
+    {
+        return $request
+            ->withMaxTokens(4000)
+            ->withProviderOptions([
+                'cacheType' => 'ephemeral',
+                'citations' => true,
+            ]);
+    }
+}
+
+class OpenAIStructuredConfig
+{
+    public function __invoke(PendingRequest $request): PendingRequest
+    {
+        return $request
+            ->withMaxTokens(2000)
+            ->withProviderOptions([
+                'response_format' => ['type' => 'json_object'],
+            ]);
+    }
+}
+
+// Usage
+$response = Prism::text()
+    ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+    ->withPrompt('Explain quantum computing')
+    ->whenProvider(Provider::Anthropic, new AnthropicCachingConfig())
+    ->whenProvider(Provider::OpenAI, new OpenAIStructuredConfig())
+    ->asText();
+```
+
+This approach is especially useful when you need to reuse configurations across multiple requests.
+
+## Dynamic Provider Selection
+
+You can dynamically choose providers based on runtime conditions:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class SmartAIRouter
+{
+    public function generate(string $prompt, int $complexity = 5): string
+    {
+        // Choose provider based on complexity
+        [$provider, $model] = $this->selectProvider($complexity);
+        
+        $response = Prism::text()
+            ->using($provider, $model)
+            ->withPrompt($prompt)
+            ->whenProvider(
+                Provider::Anthropic,
+                fn ($request) => $request->withProviderOptions(['cacheType' => 'ephemeral'])
+            )
+            ->whenProvider(
+                Provider::OpenAI,
+                fn ($request) => $request->withTemperature(0.7)
+            )
+            ->asText();
+        
+        return $response->text;
+    }
+    
+    protected function selectProvider(int $complexity): array
+    {
+        return match (true) {
+            $complexity <= 3 => [Provider::OpenAI, 'gpt-4o-mini'],
+            $complexity <= 7 => [Provider::OpenAI, 'gpt-4'],
+            default => [Provider::Anthropic, 'claude-3-5-sonnet-20241022'],
+        };
+    }
+}
+```
+
+## Best Practices
+
+### 1. Avoid SystemMessages in Multi-Provider Code
+
+When working with multiple providers, use `withSystemPrompt()` instead of adding `SystemMessage` objects directly:
+
+```php
+use Prism\Prism\ValueObjects\Messages\SystemMessage;
+use Prism\Prism\ValueObjects\Messages\UserMessage;
+
+// ❌ Avoid this when switching between providers
+$response = Prism::text()
+    ->using(Provider::OpenAI, 'gpt-4')
+    ->withMessages([
+        new SystemMessage('You are a helpful assistant.'),
+        new UserMessage('Tell me about AI'),
+    ])
+    ->asText();
+
+// ✅ Prefer this instead
+$response = Prism::text()
+    ->using(Provider::OpenAI, 'gpt-4')
+    ->withSystemPrompt('You are a helpful assistant.')
+    ->withPrompt('Tell me about AI')
+    ->asText();
+```
+
+This allows Prism to handle provider-specific formatting of system messages automatically.
+
+### 2. Test with Multiple Providers
+
+Always test your code with multiple providers to ensure compatibility:
+
+```php
+use Tests\TestCase;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class MultiProviderTest extends TestCase
+{
+    /** @dataProvider providerDataProvider */
+    public function test_works_with_all_providers($provider, $model): void
+    {
+        $response = Prism::text()
+            ->using($provider, $model)
+            ->withPrompt('Say hello')
+            ->asText();
+        
+        expect($response->text)->not->toBeEmpty();
+    }
+    
+    public static function providerDataProvider(): array
+    {
+        return [
+            'OpenAI' => [Provider::OpenAI, 'gpt-4o-mini'],
+            'Anthropic' => [Provider::Anthropic, 'claude-3-5-sonnet-20241022'],
+            'Groq' => [Provider::Groq, 'llama-3.1-8b-instant'],
+        ];
+    }
+}
+```
+
+### 3. Document Provider-Specific Behavior
+
+Clearly document when code relies on provider-specific features:
+
+```php
+/**
+ * Generate a summary with optional caching.
+ * 
+ * Note: Caching is only available with Anthropic. Other providers
+ * will ignore the caching configuration.
+ */
+function generateCachedSummary(string $content): string
+{
+    $response = Prism::text()
+        ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+        ->withPrompt("Summarize: {$content}")
+        ->whenProvider(
+            Provider::Anthropic,
+            fn ($request) => $request->withProviderOptions([
+                'cacheType' => 'ephemeral',
+            ])
+        )
+        ->asText();
+    
+    return $response->text;
+}
+```
+
+### 4. Graceful Fallbacks
+
+Always provide sensible defaults when provider-specific features aren't available:
+
+```php
+function generateWithOptionalFeatures(string $prompt): string
+{
+    $response = Prism::text()
+        ->using(Provider::OpenAI, 'gpt-4')
+        ->withPrompt($prompt)
+        ->withMaxTokens(1000) // Default for all providers
+        ->whenProvider(
+            Provider::Anthropic,
+            fn ($request) => $request
+                ->withMaxTokens(2000) // Anthropic supports more
+                ->withProviderOptions(['cacheType' => 'ephemeral'])
+        )
+        ->asText();
+    
+    return $response->text;
+}
+```
+
+## Provider Compatibility Matrix
+
+Here's a quick reference for feature support across providers:
+
+| Feature | OpenAI | Anthropic | Groq | Ollama | Mistral |
+|---------|--------|-----------|------|--------|----------|
+| Text Generation | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Streaming | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Structured Output | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Tool Calling | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Embeddings | ✅ | ❌ | ❌ | ✅ | ✅ |
+| Image Generation | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Vision | ✅ | ✅ | ✅ | ✅ | ✅ |
+| Prompt Caching | ❌ | ✅ | ❌ | ❌ | ❌ |
+
+<Info>
+This matrix is a general guide. Specific model support may vary. Always check the provider's documentation for model-specific capabilities.
+</Info>
+
+## Advanced: Provider Abstraction Layer
+
+For large applications, consider creating an abstraction layer:
+
+```php
+namespace App\Services\AI;
+
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class AIService
+{
+    public function __construct(
+        private Provider $defaultProvider = Provider::OpenAI,
+        private string $defaultModel = 'gpt-4'
+    ) {}
+    
+    public function complete(string $prompt, array $options = []): string
+    {
+        $request = Prism::text()
+            ->using(
+                $options['provider'] ?? $this->defaultProvider,
+                $options['model'] ?? $this->defaultModel
+            )
+            ->withPrompt($prompt);
+        
+        // Apply provider-specific optimizations
+        $request = $this->optimizeForProvider($request);
+        
+        $response = $request->asText();
+        return $response->text;
+    }
+    
+    protected function optimizeForProvider($request)
+    {
+        return $request
+            ->whenProvider(
+                Provider::Anthropic,
+                fn ($r) => $r->withProviderOptions(['cacheType' => 'ephemeral'])
+            )
+            ->whenProvider(
+                Provider::OpenAI,
+                fn ($r) => $r->withTemperature(0.7)
+            )
+            ->whenProvider(
+                Provider::Groq,
+                fn ($r) => $r->withMaxTokens(2000)
+            );
+    }
+}
+```
+
+This abstraction hides provider complexities from the rest of your application.
+
+<Tip>
+The `whenProvider()` method works with all request types in Prism, including text, structured output, embeddings, and image generation requests.
+</Tip>

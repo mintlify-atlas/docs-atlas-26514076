@@ -1,0 +1,534 @@
+---
+title: "Embeddings"
+description: "Generate vector embeddings for text and images using Prism's embeddings API"
+---
+
+## Overview
+
+Prism's embeddings API allows you to generate vector representations of text and images. These embeddings are useful for:
+- Semantic search and similarity matching
+- Content recommendation systems
+- Clustering and classification
+- RAG (Retrieval-Augmented Generation) systems
+- Anomaly detection
+
+Use `Prism::embeddings()` to generate embeddings from text strings or images.
+
+<Note>
+Check the [provider documentation](/providers/overview) to see which providers support embeddings and what models are available.
+</Note>
+
+## Text Embeddings
+
+### Basic Usage
+
+Generate embeddings for a single text input:
+
+```php
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromInput('Hello, this is a test sentence')
+    ->asEmbeddings();
+
+$embedding = $response->embeddings[0];
+$vector = $embedding->embedding; // Array of floats
+```
+
+### Multiple Text Inputs
+
+Generate embeddings for multiple texts in a single request:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromArray([
+        'First sentence to embed',
+        'Second sentence to embed',
+        'Third sentence to embed'
+    ])
+    ->asEmbeddings();
+
+// Process each embedding
+foreach ($response->embeddings as $embedding) {
+    $vector = $embedding->embedding;
+    // Store or process the vector
+}
+```
+
+### Chaining Inputs
+
+Build up multiple inputs using method chaining:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromInput('First input')
+    ->fromInput('Second input')
+    ->fromInput('Third input')
+    ->asEmbeddings();
+
+echo count($response->embeddings); // 3
+```
+
+### Embedding File Contents
+
+Generate embeddings directly from file contents:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromFile('/path/to/document.txt')
+    ->asEmbeddings();
+
+$embedding = $response->embeddings[0];
+```
+
+<Warning>
+The `fromFile()` method reads the entire file content. Ensure the file exists and is readable, or an exception will be thrown.
+</Warning>
+
+## Image Embeddings
+
+Some providers support generating embeddings for images, enabling visual similarity search and multimodal applications.
+
+### Single Image
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::embeddings()
+    ->using('your-provider', 'multimodal-embedding-model')
+    ->fromImage(Image::fromLocalPath('/path/to/image.jpg'))
+    ->asEmbeddings();
+
+$imageEmbedding = $response->embeddings[0];
+```
+
+### Multiple Images
+
+Generate embeddings for multiple images:
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$images = [
+    Image::fromLocalPath('/path/to/image1.jpg'),
+    Image::fromLocalPath('/path/to/image2.jpg'),
+    Image::fromUrl('https://example.com/image3.jpg')
+];
+
+$response = Prism::embeddings()
+    ->using('your-provider', 'multimodal-embedding-model')
+    ->fromImages($images)
+    ->asEmbeddings();
+
+foreach ($response->embeddings as $embedding) {
+    $vector = $embedding->embedding;
+    // Process image embeddings
+}
+```
+
+### Loading Images
+
+Prism supports multiple ways to load images:
+
+<CodeGroup>
+```php Local Path
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromLocalPath('/path/to/image.jpg');
+```
+
+```php Storage Disk
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromStoragePath(
+    path: 'images/photo.jpg',
+    diskName: 's3'  // optional
+);
+```
+
+```php URL
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromUrl('https://example.com/image.jpg');
+```
+
+```php Base64
+use Prism\Prism\ValueObjects\Media\Image;
+
+$image = Image::fromBase64(
+    base64: $base64String,
+    mimeType: 'image/jpeg'
+);
+```
+</CodeGroup>
+
+<Info>
+Not all providers support image embeddings. Common providers with image embedding support include CLIP-based models and multimodal embedding models like BGE-VL.
+</Info>
+
+## Mixing Text and Images
+
+Generate embeddings for both text and images in a single request:
+
+```php
+use Prism\Prism\ValueObjects\Media\Image;
+
+$response = Prism::embeddings()
+    ->using('your-provider', 'multimodal-model')
+    ->fromInput('A beautiful sunset over the ocean')
+    ->fromImage(Image::fromLocalPath('/path/to/sunset.jpg'))
+    ->fromInput('Beach vacation photos')
+    ->asEmbeddings();
+
+// Process embeddings in order
+foreach ($response->embeddings as $index => $embedding) {
+    echo "Embedding {$index}: " . count($embedding->embedding) . " dimensions\n";
+}
+```
+
+## Provider-Specific Options
+
+Configure provider-specific behavior with `withProviderOptions()`:
+
+```php
+// OpenAI embedding options
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-large')
+    ->fromInput('Sample text')
+    ->withProviderOptions([
+        'dimensions' => 1024,     // Reduce dimensions (3-large supports this)
+        'encoding_format' => 'float'
+    ])
+    ->asEmbeddings();
+```
+
+<Tabs>
+  <Tab title="OpenAI">
+    ```php
+    // OpenAI-specific options
+    $response = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-large')
+        ->fromArray(['Text 1', 'Text 2'])
+        ->withProviderOptions([
+            'dimensions' => 256,  // Reduce from 3072 to 256
+            'encoding_format' => 'float'
+        ])
+        ->asEmbeddings();
+    ```
+  </Tab>
+  
+  <Tab title="Other Providers">
+    ```php
+    // Check your provider's documentation for available options
+    $response = Prism::embeddings()
+        ->using('your-provider', 'embedding-model')
+        ->fromInput('Sample text')
+        ->withProviderOptions([
+            // Provider-specific options
+        ])
+        ->asEmbeddings();
+    ```
+  </Tab>
+</Tabs>
+
+## Working with Responses
+
+### Accessing Embeddings
+
+The response contains an array of `Embedding` objects:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromArray(['Text 1', 'Text 2', 'Text 3'])
+    ->asEmbeddings();
+
+// Access all embeddings
+foreach ($response->embeddings as $embedding) {
+    $vector = $embedding->embedding; // Array of floats
+    echo "Dimensions: " . count($vector) . "\n";
+}
+
+// Get specific embedding
+$firstEmbedding = $response->embeddings[0];
+```
+
+### Usage Information
+
+Track API usage for cost monitoring:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromInput('Sample text')
+    ->asEmbeddings();
+
+// Access usage data
+echo "Prompt tokens: {$response->usage->promptTokens}\n";
+echo "Total tokens: {$response->usage->totalTokens}\n";
+```
+
+### Response Metadata
+
+Access provider and model information:
+
+```php
+// Provider details
+echo "Provider: {$response->meta->provider}\n";
+echo "Model: {$response->meta->model}\n";
+echo "Finish reason: {$response->meta->finishReason}\n";
+
+// Raw response from provider
+$rawData = $response->raw;
+```
+
+### Converting to Array
+
+Serialize the response for storage or transmission:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromInput('Sample text')
+    ->asEmbeddings();
+
+$array = $response->toArray();
+// Returns:
+// [
+//   'embeddings' => [
+//     ['embedding' => [0.123, -0.456, ...]],
+//     ...
+//   ],
+//   'usage' => [...],
+//   'meta' => [...],
+//   'raw' => [...]
+// ]
+```
+
+## Client Configuration
+
+### HTTP Options
+
+Configure HTTP client behavior:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromArray($largeArrayOfTexts)
+    ->withClientOptions([
+        'timeout' => 120,
+        'connect_timeout' => 30
+    ])
+    ->asEmbeddings();
+```
+
+### Retry Configuration
+
+Configure automatic retries:
+
+```php
+$response = Prism::embeddings()
+    ->using('openai', 'text-embedding-3-small')
+    ->fromInput('Sample text')
+    ->withClientRetry(
+        times: 3,
+        sleepMilliseconds: 1000
+    )
+    ->asEmbeddings();
+```
+
+## Error Handling
+
+Handle errors when generating embeddings:
+
+```php
+use Illuminate\Http\Client\RequestException;
+use Prism\Prism\Exceptions\PrismException;
+
+try {
+    $response = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-small')
+        ->fromInput('Sample text')
+        ->asEmbeddings();
+    
+    $vector = $response->embeddings[0]->embedding;
+} catch (PrismException $e) {
+    // Handle Prism-specific errors (e.g., no input provided)
+    echo "Error: {$e->getMessage()}";
+} catch (RequestException $e) {
+    // Handle API errors
+    echo "API error: {$e->getMessage()}";
+}
+```
+
+## Common Use Cases
+
+<Tabs>
+  <Tab title="Semantic Search">
+    ```php
+    // Index documents with embeddings
+    $documents = [
+        'Machine learning is a subset of AI',
+        'Deep learning uses neural networks',
+        'Natural language processing analyzes text'
+    ];
+    
+    $response = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-small')
+        ->fromArray($documents)
+        ->asEmbeddings();
+    
+    // Store embeddings in database
+    foreach ($response->embeddings as $index => $embedding) {
+        Document::create([
+            'content' => $documents[$index],
+            'embedding' => json_encode($embedding->embedding)
+        ]);
+    }
+    
+    // Search with query embedding
+    $queryResponse = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-small')
+        ->fromInput('What is deep learning?')
+        ->asEmbeddings();
+    
+    $queryVector = $queryResponse->embeddings[0]->embedding;
+    // Calculate cosine similarity with stored embeddings
+    ```
+  </Tab>
+  
+  <Tab title="Content Recommendation">
+    ```php
+    // Generate embeddings for user preferences
+    $userInterests = User::find($userId)->interests; // Array of text
+    
+    $userResponse = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-small')
+        ->fromArray($userInterests)
+        ->asEmbeddings();
+    
+    // Average the embeddings to get user profile
+    $userProfile = calculateAverageEmbedding(
+        $userResponse->embeddings
+    );
+    
+    // Find similar content
+    $contentResponse = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-small')
+        ->fromArray($availableContent)
+        ->asEmbeddings();
+    
+    // Calculate similarity and recommend
+    $recommendations = findMostSimilar(
+        $userProfile,
+        $contentResponse->embeddings
+    );
+    ```
+  </Tab>
+  
+  <Tab title="Duplicate Detection">
+    ```php
+    // Detect duplicate or near-duplicate content
+    $newContent = 'This is a new article';
+    
+    // Get embedding for new content
+    $newResponse = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-small')
+        ->fromInput($newContent)
+        ->asEmbeddings();
+    
+    $newEmbedding = $newResponse->embeddings[0]->embedding;
+    
+    // Compare with existing content embeddings
+    $existingEmbeddings = Article::all()
+        ->pluck('embedding')
+        ->map(fn($e) => json_decode($e, true));
+    
+    foreach ($existingEmbeddings as $existing) {
+        $similarity = cosineSimilarity($newEmbedding, $existing);
+        
+        if ($similarity > 0.95) {
+            echo "Duplicate content detected!\n";
+            break;
+        }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Clustering">
+    ```php
+    // Group similar documents using embeddings
+    $documents = Article::all()->pluck('content')->toArray();
+    
+    $response = Prism::embeddings()
+        ->using('openai', 'text-embedding-3-small')
+        ->fromArray($documents)
+        ->asEmbeddings();
+    
+    // Extract embeddings as vectors
+    $vectors = array_map(
+        fn($embedding) => $embedding->embedding,
+        $response->embeddings
+    );
+    
+    // Apply clustering algorithm (e.g., K-means)
+    $clusters = performKMeansClustering($vectors, $k = 5);
+    
+    // Assign articles to clusters
+    foreach ($clusters as $clusterId => $articleIndices) {
+        foreach ($articleIndices as $index) {
+            Article::where('id', $index)->update([
+                'cluster' => $clusterId
+            ]);
+        }
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Best Practices
+
+1. **Batch requests**: Process multiple inputs in a single request to reduce API calls
+2. **Cache embeddings**: Store embeddings in your database to avoid regenerating them
+3. **Choose appropriate dimensions**: Use smaller dimensions for faster processing if your use case allows
+4. **Validate inputs**: Ensure at least one input (text or image) is provided before calling `asEmbeddings()`
+5. **Monitor costs**: Embedding generation can add up with large volumes of text
+6. **Normalize vectors**: Some similarity calculations require normalized vectors
+
+## Deprecated Methods
+
+<Warning>
+The `generate()` method is deprecated. Use `asEmbeddings()` instead:
+
+```php
+// Deprecated
+$response = Prism::embeddings()->fromInput('text')->generate();
+
+// Use this instead
+$response = Prism::embeddings()->fromInput('text')->asEmbeddings();
+```
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Semantic Search" icon="magnifying-glass" href="/multi-modal/embeddings#common-use-cases">
+    Build a semantic search system with embeddings
+  </Card>
+  
+  <Card title="Image Generation" icon="image" href="/multi-modal/images">
+    Generate images from text descriptions
+  </Card>
+  
+  <Card title="Audio Processing" icon="microphone" href="/multi-modal/audio">
+    Convert text to speech or transcribe audio
+  </Card>
+  
+  <Card title="Providers" icon="plug" href="/providers/overview">
+    Learn about provider-specific embedding models
+  </Card>
+</CardGroup>

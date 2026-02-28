@@ -1,0 +1,457 @@
+---
+title: Custom Providers
+description: Learn how to create and register custom LLM providers to extend Prism with new integrations
+---
+
+# Custom Providers
+
+Prism's architecture makes it easy to add support for new AI providers. Whether you're integrating a proprietary LLM, a regional provider, or an experimental model, you can extend Prism by creating a custom provider implementation.
+
+## Provider Architecture
+
+All providers in Prism extend the abstract `Provider` class, which defines the interface for all LLM operations. The base class provides default implementations that throw exceptions for unsupported operations, so you only need to implement the features your provider supports.
+
+### Available Methods
+
+The `Provider` class defines these methods (located at `src/Providers/Provider.php:29`):
+
+- `text(TextRequest $request): TextResponse` - Text generation
+- `structured(StructuredRequest $request): StructuredResponse` - Structured output
+- `embeddings(EmbeddingsRequest $request): EmbeddingsResponse` - Embedding generation
+- `images(ImagesRequest $request): ImagesResponse` - Image generation
+- `textToSpeech(TextToSpeechRequest $request): AudioResponse` - Text-to-speech
+- `speechToText(SpeechToTextRequest $request): AudioTextResponse` - Speech-to-text
+- `stream(TextRequest $request): Generator` - Streaming text generation
+- `moderation(ModerationRequest $request): ModerationResponse` - Content moderation
+
+## Creating a Custom Provider
+
+Let's create a custom provider step by step. We'll build a provider for a hypothetical AI service called "CustomAI".
+
+### Step 1: Create the Provider Class
+
+Create a new class that extends `Provider`:
+
+```php
+namespace App\Prism\Providers;
+
+use Prism\Prism\Providers\Provider;
+use Prism\Prism\Text\Request as TextRequest;
+use Prism\Prism\Text\Response as TextResponse;
+use Prism\Prism\Enums\FinishReason;
+use Prism\Prism\ValueObjects\Usage;
+use Prism\Prism\ValueObjects\Meta;
+use Illuminate\Support\Facades\Http;
+
+class CustomAI extends Provider
+{
+    public function __construct(
+        protected string $apiKey,
+        protected string $baseUrl = 'https://api.customai.example',
+    ) {}
+    
+    public function text(TextRequest $request): TextResponse
+    {
+        try {
+            $response = Http::withHeaders([
+                'Authorization' => 'Bearer ' . $this->apiKey,
+                'Content-Type' => 'application/json',
+            ])->post($this->baseUrl . '/v1/completions', [
+                'model' => $request->model(),
+                'messages' => $this->mapMessages($request),
+                'temperature' => $request->temperature(),
+                'max_tokens' => $request->maxTokens(),
+            ]);
+            
+            $data = $response->json();
+            
+            return new TextResponse(
+                steps: collect([]),
+                text: $data['content'],
+                finishReason: $this->mapFinishReason($data['finish_reason']),
+                toolCalls: [],
+                toolResults: [],
+                usage: new Usage(
+                    promptTokens: $data['usage']['prompt_tokens'],
+                    completionTokens: $data['usage']['completion_tokens']
+                ),
+                meta: new Meta(
+                    id: $data['id'],
+                    model: $data['model']
+                ),
+                messages: collect([]),
+                additionalContent: [],
+            );
+        } catch (\Illuminate\Http\Client\RequestException $e) {
+            $this->handleRequestException($request->model(), $e);
+        }
+    }
+    
+    protected function mapMessages(TextRequest $request): array
+    {
+        $messages = [];
+        
+        // Add system prompt if present
+        if ($request->systemPrompt()) {
+            $messages[] = [
+                'role' => 'system',
+                'content' => $request->systemPrompt(),
+            ];
+        }
+        
+        // Add the main prompt
+        $messages[] = [
+            'role' => 'user',
+            'content' => $request->prompt(),
+        ];
+        
+        return $messages;
+    }
+    
+    protected function mapFinishReason(string $reason): FinishReason
+    {
+        return match($reason) {
+            'stop' => FinishReason::Stop,
+            'length' => FinishReason::Length,
+            'content_filter' => FinishReason::ContentFilter,
+            default => FinishReason::Unknown,
+        };
+    }
+}
+```
+
+<Note>
+You only need to implement the methods your provider supports. If your provider doesn't support image generation, don't override the `images()` method - it will automatically throw a `PrismException`.
+</Note>
+
+### Step 2: Register the Provider
+
+Register your custom provider in a service provider:
+
+```php
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use App\Prism\Providers\CustomAI;
+
+class AppServiceProvider extends ServiceProvider
+{
+    public function boot(): void
+    {
+        $this->app['prism-manager']->extend('customai', function ($app, $config) {
+            return new CustomAI(
+                apiKey: $config['api_key'],
+                baseUrl: $config['base_url'] ?? 'https://api.customai.example',
+            );
+        });
+    }
+}
+```
+
+The closure receives two parameters:
+- `$app` - The Laravel application instance
+- `$config` - The provider configuration from `config/prism.php`
+
+### Step 3: Add Configuration
+
+Add your provider's configuration to `config/prism.php`:
+
+```php
+return [
+    'providers' => [
+        // ... other providers ...
+        
+        'customai' => [
+            'api_key' => env('CUSTOMAI_API_KEY'),
+            'base_url' => env('CUSTOMAI_BASE_URL', 'https://api.customai.example'),
+        ],
+    ],
+];
+```
+
+And add the environment variable to your `.env` file:
+
+```bash
+CUSTOMAI_API_KEY=your-api-key-here
+CUSTOMAI_BASE_URL=https://api.customai.example
+```
+
+### Step 4: Use Your Provider
+
+Now you can use your custom provider just like any built-in provider:
+
+```php
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::text()
+    ->using('customai', 'custom-model-v1')
+    ->withPrompt('Hello, world!')
+    ->asText();
+
+echo $response->text;
+```
+
+## Implementing Additional Features
+
+### Adding Embeddings Support
+
+To add embeddings support, implement the `embeddings()` method:
+
+```php
+use Prism\Prism\Embeddings\Request as EmbeddingRequest;
+use Prism\Prism\Embeddings\Response as EmbeddingResponse;
+use Prism\Prism\ValueObjects\Embedding;
+use Prism\Prism\ValueObjects\EmbeddingsUsage;
+
+public function embeddings(EmbeddingRequest $request): EmbeddingResponse
+{
+    try {
+        $response = Http::withHeaders([
+            'Authorization' => 'Bearer ' . $this->apiKey,
+        ])->post($this->baseUrl . '/v1/embeddings', [
+            'model' => $request->model(),
+            'input' => $request->input(),
+        ]);
+        
+        $data = $response->json();
+        
+        $embeddings = array_map(
+            fn($item) => Embedding::fromArray($item['embedding']),
+            $data['embeddings']
+        );
+        
+        return new EmbeddingResponse(
+            embeddings: $embeddings,
+            usage: new EmbeddingsUsage($data['usage']['total_tokens']),
+            meta: new Meta($data['id'], $data['model'])
+        );
+    } catch (\Illuminate\Http\Client\RequestException $e) {
+        $this->handleRequestException($request->model(), $e);
+    }
+}
+```
+
+### Adding Streaming Support
+
+For streaming responses, implement the `stream()` method that returns a Generator:
+
+```php
+use Generator;
+use Prism\Prism\Streaming\Events\StreamEvent;
+use Prism\Prism\Streaming\Events\StreamStartEvent;
+use Prism\Prism\Streaming\Events\TextDeltaEvent;
+use Prism\Prism\Streaming\Events\StreamEndEvent;
+use Prism\Prism\Streaming\EventID;
+
+public function stream(TextRequest $request): Generator
+{
+    $response = Http::withHeaders([
+        'Authorization' => 'Bearer ' . $this->apiKey,
+    ])->timeout(120)->stream('POST', $this->baseUrl . '/v1/stream', [
+        'model' => $request->model(),
+        'messages' => $this->mapMessages($request),
+    ]);
+    
+    $messageId = EventID::generate();
+    
+    yield new StreamStartEvent(
+        id: EventID::generate(),
+        timestamp: time(),
+        model: $request->model(),
+        provider: 'customai'
+    );
+    
+    foreach ($response as $chunk) {
+        $data = json_decode($chunk, true);
+        
+        if (isset($data['delta'])) {
+            yield new TextDeltaEvent(
+                id: EventID::generate(),
+                timestamp: time(),
+                delta: $data['delta'],
+                messageId: $messageId
+            );
+        }
+    }
+    
+    yield new StreamEndEvent(
+        id: EventID::generate(),
+        timestamp: time(),
+        finishReason: FinishReason::Stop,
+        usage: new Usage(0, 0)
+    );
+}
+```
+
+## Custom Error Handling
+
+The base `Provider` class includes a default `handleRequestException()` method that handles common HTTP status codes. You can override this to add provider-specific error handling:
+
+```php
+use Illuminate\Http\Client\RequestException;
+use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\Exceptions\PrismRateLimitedException;
+use Prism\Prism\Exceptions\PrismProviderOverloadedException;
+
+public function handleRequestException(string $model, RequestException $e): never
+{
+    $response = $e->response;
+    
+    match ($response->getStatusCode()) {
+        429 => throw PrismRateLimitedException::make(
+            rateLimits: $this->parseRateLimits($response),
+            retryAfter: $response->header('retry-after') 
+                ? (int) $response->header('retry-after') 
+                : null
+        ),
+        503 => throw PrismProviderOverloadedException::make('customai'),
+        default => parent::handleRequestException($model, $e),
+    };
+}
+
+protected function parseRateLimits($response): array
+{
+    // Parse rate limit information from response headers or body
+    return [
+        // Your rate limit parsing logic
+    ];
+}
+```
+
+<Warning>
+The `handleRequestException()` method must have a return type of `never` since it always throws an exception. Always call `parent::handleRequestException()` for unhandled status codes.
+</Warning>
+
+## Real-World Example: Local LLM Provider
+
+Here's a complete example for a local LLM running on localhost:
+
+```php
+namespace App\Prism\Providers;
+
+use Prism\Prism\Providers\Provider;
+use Prism\Prism\Text\Request as TextRequest;
+use Prism\Prism\Text\Response as TextResponse;
+use Prism\Prism\Enums\FinishReason;
+use Prism\Prism\ValueObjects\Usage;
+use Prism\Prism\ValueObjects\Meta;
+use Illuminate\Support\Facades\Http;
+
+class LocalLLM extends Provider
+{
+    public function __construct(
+        protected string $baseUrl = 'http://localhost:8000',
+    ) {}
+    
+    public function text(TextRequest $request): TextResponse
+    {
+        $response = Http::timeout(300)->post($this->baseUrl . '/generate', [
+            'prompt' => $request->prompt(),
+            'system' => $request->systemPrompt(),
+            'temperature' => $request->temperature() ?? 0.7,
+            'max_tokens' => $request->maxTokens() ?? 1000,
+        ]);
+        
+        $data = $response->json();
+        
+        return new TextResponse(
+            steps: collect([]),
+            text: $data['text'],
+            finishReason: FinishReason::Stop,
+            toolCalls: [],
+            toolResults: [],
+            usage: new Usage(
+                promptTokens: $data['tokens']['prompt'] ?? 0,
+                completionTokens: $data['tokens']['completion'] ?? 0
+            ),
+            meta: new Meta('local', 'local-llm'),
+            messages: collect([]),
+            additionalContent: [],
+        );
+    }
+}
+```
+
+Register it:
+
+```php
+$this->app['prism-manager']->extend('local-llm', function ($app, $config) {
+    return new LocalLLM(
+        baseUrl: $config['base_url'] ?? 'http://localhost:8000'
+    );
+});
+```
+
+Use it:
+
+```php
+$response = Prism::text()
+    ->using('local-llm', 'local-model')
+    ->withPrompt('What is PHP?')
+    ->asText();
+```
+
+## Testing Your Provider
+
+Test your custom provider using PHPUnit:
+
+```php
+use Tests\TestCase;
+use Illuminate\Support\Facades\Http;
+use Prism\Prism\Facades\Prism;
+
+class CustomAITest extends TestCase
+{
+    public function test_custom_provider_generates_text(): void
+    {
+        Http::fake([
+            'api.customai.example/v1/completions' => Http::response([
+                'id' => 'test-123',
+                'model' => 'custom-model-v1',
+                'content' => 'Hello from CustomAI!',
+                'finish_reason' => 'stop',
+                'usage' => [
+                    'prompt_tokens' => 10,
+                    'completion_tokens' => 5,
+                ],
+            ]),
+        ]);
+        
+        $response = Prism::text()
+            ->using('customai', 'custom-model-v1')
+            ->withPrompt('Say hello')
+            ->asText();
+        
+        expect($response->text)->toBe('Hello from CustomAI!');
+        expect($response->usage->promptTokens)->toBe(10);
+    }
+}
+```
+
+## Best Practices
+
+<Steps>
+  <Step title="Start with text generation">
+    Begin by implementing just the `text()` method. Once that works, add support for other features incrementally.
+  </Step>
+  
+  <Step title="Handle errors gracefully">
+    Override `handleRequestException()` to provide meaningful error messages and handle provider-specific error codes.
+  </Step>
+  
+  <Step title="Map responses correctly">
+    Ensure you correctly map your provider's response format to Prism's response objects. Pay attention to finish reasons and token counts.
+  </Step>
+  
+  <Step title="Test thoroughly">
+    Write tests for your provider using HTTP fakes to avoid making real API calls during testing.
+  </Step>
+  
+  <Step title="Document your models">
+    Create documentation that lists supported models and any provider-specific options or limitations.
+  </Step>
+</Steps>
+
+<Tip>
+Study existing provider implementations in `src/Providers/` to understand common patterns and best practices used throughout Prism.
+</Tip>

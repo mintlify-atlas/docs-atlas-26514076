@@ -1,0 +1,125 @@
+---
+title: Installation
+description: Install Prism via Composer and configure it for your Laravel application
+---
+
+## Requirements
+
+Before installing Prism, make sure your project meets these requirements:
+
+- **PHP 8.2 or higher**
+- **Laravel 11.0 or higher** (supports Laravel 11, 12, and 13)
+- **ext-fileinfo** PHP extension
+
+<Warning>
+Prism is actively evolving. To prevent unexpected issues from breaking changes, we strongly recommend pinning your installation to a specific version. Example: `"prism-php/prism": "^0.3.0"`.
+</Warning>
+
+## Installation steps
+
+<Steps>
+  <Step title="Install via Composer">
+    Add Prism to your Laravel project using Composer:
+    
+    ```bash
+    composer require prism-php/prism
+    ```
+    
+    This command will download Prism and its dependencies into your project.
+  </Step>
+  
+  <Step title="Publish the configuration file">
+    Prism comes with a configuration file that you'll want to customize. Publish it to your `config` directory:
+    
+    ```bash
+    php artisan vendor:publish --tag=prism-config
+    ```
+    
+    This creates a new file at `config/prism.php` where you can configure your AI providers.
+  </Step>
+  
+  <Step title="Configure your providers">
+    Add your API keys to your `.env` file. Here's an example for OpenAI:
+    
+    ```bash
+    OPENAI_API_KEY=your-api-key-here
+    ```
+    
+    See the [Configuration](/configuration) page for detailed information about configuring providers.
+  </Step>
+  
+  <Step title="Start building">
+    You're ready to start using Prism! Try generating your first AI response:
+    
+    ```php
+    use Prism\Prism\Facades\Prism;
+    use Prism\Prism\Enums\Provider;
+    
+    $response = Prism::text()
+        ->using(Provider::OpenAI, 'gpt-4')
+        ->withPrompt('Hello, world!')
+        ->asText();
+    
+    echo $response->text;
+    ```
+  </Step>
+</Steps>
+
+## Service provider registration
+
+Prism automatically registers its service provider through Laravel's package discovery. The `PrismServiceProvider` is registered automatically, so you don't need to add it manually.
+
+### What gets registered
+
+The service provider registers:
+
+- **Prism instance**: Available via the `prism()` helper function or `Prism` facade
+- **Prism manager**: Handles provider resolution and configuration
+- **Prism server**: Optional MCP server functionality (disabled by default)
+
+## Facade and helper
+
+Prism provides two convenient ways to access its functionality:
+
+### Using the facade
+
+```php
+use Prism\Prism\Facades\Prism;
+
+$response = Prism::text()
+    ->using(Provider::OpenAI, 'gpt-4')
+    ->withPrompt('Generate text')
+    ->asText();
+```
+
+### Using the helper function
+
+```php
+$response = prism()
+    ->text()
+    ->using(Provider::OpenAI, 'gpt-4')
+    ->withPrompt('Generate text')
+    ->asText();
+```
+
+Both approaches work identically - use whichever you prefer!
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart" icon="rocket" href="/quickstart">
+    Build your first AI-powered feature with Prism
+  </Card>
+  
+  <Card title="Configuration" icon="gear" href="/configuration">
+    Learn how to configure providers and customize Prism
+  </Card>
+  
+  <Card title="Text generation" icon="message" href="/core-concepts/text-generation">
+    Explore text generation capabilities in depth
+  </Card>
+  
+  <Card title="Providers" icon="server" href="/providers/openai">
+    Discover all supported AI providers
+  </Card>
+</CardGroup>

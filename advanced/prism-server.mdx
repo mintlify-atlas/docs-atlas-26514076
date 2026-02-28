@@ -1,0 +1,417 @@
+---
+title: PrismServer
+description: Register and manage multiple Prism instances for reuse across your application
+---
+
+# PrismServer
+
+PrismServer provides a centralized registry for managing multiple pre-configured Prism instances. This is particularly useful when you want to define different AI configurations once and reuse them throughout your application.
+
+## Overview
+
+PrismServer allows you to:
+- Register multiple Prism configurations with unique names
+- Retrieve and reuse these configurations anywhere in your application
+- Maintain consistent AI behavior across different parts of your codebase
+- Simplify complex AI workflows by encapsulating configuration logic
+
+## Basic Usage
+
+PrismServer stores closures or callables that return `PendingRequest` instances. Here's how to register and use them:
+
+### Registering Prism Instances
+
+```php
+use Prism\Prism\PrismServer;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+$server = new PrismServer();
+
+// Register a simple text generation Prism
+$server->register('blog-writer', function () {
+    return Prism::text()
+        ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+        ->withSystemPrompt('You are a professional blog writer.')
+        ->withMaxTokens(2000);
+});
+
+// Register a code review Prism
+$server->register('code-reviewer', function () {
+    return Prism::text()
+        ->using(Provider::OpenAI, 'gpt-4')
+        ->withSystemPrompt('You are an expert code reviewer. Provide constructive feedback.')
+        ->withMaxTokens(1000);
+});
+```
+
+### Retrieving Registered Prisms
+
+Access your registered Prism configurations using the `prisms()` method:
+
+```php
+$prisms = $server->prisms();
+
+foreach ($prisms as $item) {
+    $name = $item['name'];  // 'blog-writer', 'code-reviewer', etc.
+    $prism = $item['prism']; // Closure that returns PendingRequest
+    
+    // Execute the Prism
+    $response = $prism()
+        ->withPrompt('Your prompt here')
+        ->asText();
+}
+```
+
+## Practical Examples
+
+### Example 1: Multi-Model Content Pipeline
+
+Use PrismServer to create a content generation pipeline that uses different models for different tasks:
+
+```php
+use Prism\Prism\PrismServer;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class ContentPipeline
+{
+    protected PrismServer $server;
+    
+    public function __construct()
+    {
+        $this->server = new PrismServer();
+        $this->setupPrisms();
+    }
+    
+    protected function setupPrisms(): void
+    {
+        // Fast model for brainstorming
+        $this->server->register('brainstormer', fn () =>
+            Prism::text()
+                ->using(Provider::OpenAI, 'gpt-4o-mini')
+                ->withSystemPrompt('Generate creative ideas.')
+                ->withTemperature(0.9)
+        );
+        
+        // Powerful model for writing
+        $this->server->register('writer', fn () =>
+            Prism::text()
+                ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+                ->withSystemPrompt('Write high-quality, engaging content.')
+                ->withMaxTokens(4000)
+        );
+        
+        // Specialized model for editing
+        $this->server->register('editor', fn () =>
+            Prism::text()
+                ->using(Provider::OpenAI, 'gpt-4')
+                ->withSystemPrompt('Edit content for clarity and grammar.')
+                ->withTemperature(0.3)
+        );
+    }
+    
+    public function generateArticle(string $topic): string
+    {
+        // Step 1: Brainstorm
+        $ideas = $this->getPrism('brainstormer')
+            ->withPrompt("Generate 3 article ideas about: {$topic}")
+            ->asText();
+        
+        // Step 2: Write
+        $draft = $this->getPrism('writer')
+            ->withPrompt("Write an article based on: {$ideas->text}")
+            ->asText();
+        
+        // Step 3: Edit
+        $final = $this->getPrism('editor')
+            ->withPrompt("Edit this article: {$draft->text}")
+            ->asText();
+        
+        return $final->text;
+    }
+    
+    protected function getPrism(string $name)
+    {
+        $prism = $this->server->prisms()
+            ->firstWhere('name', $name);
+        
+        if (!$prism) {
+            throw new \Exception("Prism '{$name}' not found");
+        }
+        
+        return ($prism['prism'])();
+    }
+}
+```
+
+### Example 2: Department-Specific AI Assistants
+
+Create specialized AI assistants for different departments:
+
+```php
+use Prism\Prism\PrismServer;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class DepartmentAI
+{
+    protected PrismServer $server;
+    
+    public function __construct()
+    {
+        $this->server = new PrismServer();
+        
+        // Sales assistant
+        $this->server->register('sales', fn () =>
+            Prism::text()
+                ->using(Provider::OpenAI, 'gpt-4')
+                ->withSystemPrompt(
+                    'You are a sales assistant. Help with lead qualification, '
+                    'proposal writing, and customer communication.'
+                )
+        );
+        
+        // Engineering assistant
+        $this->server->register('engineering', fn () =>
+            Prism::text()
+                ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+                ->withSystemPrompt(
+                    'You are a senior software engineer. Help with code review, '
+                    'architecture decisions, and technical documentation.'
+                )
+        );
+        
+        // Support assistant
+        $this->server->register('support', fn () =>
+            Prism::text()
+                ->using(Provider::OpenAI, 'gpt-4o-mini')
+                ->withSystemPrompt(
+                    'You are a customer support specialist. Provide friendly, '
+                    'helpful responses to customer inquiries.'
+                )
+                ->withTemperature(0.7)
+        );
+    }
+    
+    public function askDepartment(string $department, string $question): string
+    {
+        $prism = $this->server->prisms()
+            ->firstWhere('name', $department);
+        
+        if (!$prism) {
+            throw new \Exception("Department '{$department}' not found");
+        }
+        
+        $response = ($prism['prism'])()
+            ->withPrompt($question)
+            ->asText();
+        
+        return $response->text;
+    }
+}
+
+// Usage
+$ai = new DepartmentAI();
+
+echo $ai->askDepartment('sales', 'How do I handle a price objection?');
+echo $ai->askDepartment('engineering', 'Review this function for bugs');
+echo $ai->askDepartment('support', 'How do I reset my password?');
+```
+
+### Example 3: A/B Testing AI Models
+
+Use PrismServer to test different models or configurations:
+
+```php
+use Prism\Prism\PrismServer;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class ModelABTest
+{
+    protected PrismServer $server;
+    
+    public function __construct()
+    {
+        $this->server = new PrismServer();
+        
+        // Variant A: GPT-4 with conservative settings
+        $this->server->register('variant-a', fn () =>
+            Prism::text()
+                ->using(Provider::OpenAI, 'gpt-4')
+                ->withTemperature(0.3)
+                ->withMaxTokens(500)
+        );
+        
+        // Variant B: Claude with creative settings
+        $this->server->register('variant-b', fn () =>
+            Prism::text()
+                ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+                ->withTemperature(0.8)
+                ->withMaxTokens(1000)
+        );
+    }
+    
+    public function testVariants(string $prompt): array
+    {
+        $results = [];
+        
+        foreach ($this->server->prisms() as $item) {
+            $name = $item['name'];
+            $start = microtime(true);
+            
+            $response = ($item['prism'])()
+                ->withPrompt($prompt)
+                ->asText();
+            
+            $duration = microtime(true) - $start;
+            
+            $results[$name] = [
+                'text' => $response->text,
+                'tokens' => $response->usage->promptTokens + $response->usage->completionTokens,
+                'duration' => $duration,
+            ];
+        }
+        
+        return $results;
+    }
+}
+```
+
+## Service Provider Integration
+
+Register PrismServer in a Laravel service provider for application-wide access:
+
+```php
+namespace App\Providers;
+
+use Illuminate\Support\ServiceProvider;
+use Prism\Prism\PrismServer;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+class PrismServiceProvider extends ServiceProvider
+{
+    public function register(): void
+    {
+        $this->app->singleton(PrismServer::class, function ($app) {
+            $server = new PrismServer();
+            
+            // Register your Prism instances
+            $server->register('summarizer', fn () =>
+                Prism::text()
+                    ->using(Provider::OpenAI, 'gpt-4o-mini')
+                    ->withSystemPrompt('Summarize content concisely.')
+                    ->withMaxTokens(300)
+            );
+            
+            $server->register('translator', fn () =>
+                Prism::text()
+                    ->using(Provider::Anthropic, 'claude-3-5-sonnet-20241022')
+                    ->withSystemPrompt('Translate text accurately.')
+            );
+            
+            return $server;
+        });
+    }
+}
+```
+
+Then inject it into your controllers or services:
+
+```php
+use Prism\Prism\PrismServer;
+
+class ArticleController extends Controller
+{
+    public function __construct(
+        protected PrismServer $prismServer
+    ) {}
+    
+    public function summarize(Article $article)
+    {
+        $summarizer = $this->prismServer->prisms()
+            ->firstWhere('name', 'summarizer');
+        
+        $response = ($summarizer['prism'])()
+            ->withPrompt($article->content)
+            ->asText();
+        
+        return response()->json([
+            'summary' => $response->text,
+        ]);
+    }
+}
+```
+
+## API Reference
+
+### PrismServer Class
+
+Located at: `src/PrismServer.php:12`
+
+#### Constructor
+
+```php
+public function __construct(
+    protected Collection $prisms = new Collection
+)
+```
+
+Creates a new PrismServer instance with an empty collection of Prisms.
+
+#### register()
+
+```php
+public function register(
+    string $name,
+    Closure|callable $prism
+): self
+```
+
+Registers a Prism instance with a unique name.
+
+**Parameters:**
+- `$name` - Unique identifier for this Prism
+- `$prism` - Closure or callable that returns a `PendingRequest`
+
+**Returns:** `self` for method chaining
+
+#### prisms()
+
+```php
+public function prisms(): Collection
+```
+
+Returns all registered Prism instances as a collection.
+
+**Returns:** `Collection<int, array{name: string, prism: Closure|callable}>`
+
+Each item in the collection contains:
+- `name` (string) - The registered name
+- `prism` (Closure|callable) - The closure that returns a PendingRequest
+
+## Best Practices
+
+<Steps>
+  <Step title="Use descriptive names">
+    Choose clear, descriptive names for your registered Prisms that reflect their purpose (e.g., 'customer-support', 'code-reviewer').
+  </Step>
+  
+  <Step title="Centralize configuration">
+    Register all your Prism configurations in a single service provider to keep them organized and maintainable.
+  </Step>
+  
+  <Step title="Encapsulate complexity">
+    Use PrismServer to hide complex configuration details from your application code, exposing only simple, semantic names.
+  </Step>
+  
+  <Step title="Leverage dependency injection">
+    Register PrismServer as a singleton in your DI container so you can inject it wherever needed.
+  </Step>
+</Steps>
+
+<Tip>
+PrismServer is particularly useful when building multi-agent systems where different AI personas need to collaborate on complex tasks.
+</Tip>

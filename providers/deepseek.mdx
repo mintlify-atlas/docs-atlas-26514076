@@ -1,0 +1,195 @@
+---
+title: 'DeepSeek'
+description: 'Efficient models optimized for coding and technical tasks'
+---
+
+## Configuration
+
+```php
+'deepseek' => [
+    'api_key' => env('DEEPSEEK_API_KEY', ''),
+    'url' => env('DEEPSEEK_URL', 'https://api.deepseek.com/v1')
+]
+```
+
+## Basic Usage
+
+DeepSeek provides efficient models optimized for coding tasks:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+$response = Prism::text()
+    ->using(Provider::DeepSeek, 'deepseek-chat')
+    ->withPrompt('Write a PHP function to validate email addresses')
+    ->asText();
+
+echo $response->text;
+```
+
+## Streaming
+
+DeepSeek supports streaming responses in real-time:
+
+```php
+return Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withPrompt(request('message'))
+    ->asEventStreamResponse();
+```
+
+For complete streaming documentation, see [Streaming Output](/core-concepts/streaming).
+
+## Structured Output
+
+DeepSeek supports structured output through prompt-based JSON generation:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Schema\ObjectSchema;
+use Prism\Prism\Schema\StringSchema;
+use Prism\Prism\Schema\ArraySchema;
+
+$schema = new ObjectSchema(
+    'code_review',
+    'Code review analysis',
+    [
+        new StringSchema('summary', 'Overall code quality summary'),
+        new ArraySchema('issues', 'List of issues found',
+            new StringSchema('issue', 'Individual issue')
+        ),
+        new ArraySchema('suggestions', 'Improvement suggestions',
+            new StringSchema('suggestion', 'Individual suggestion')
+        ),
+    ],
+    ['summary', 'issues', 'suggestions']
+);
+
+$response = Prism::structured()
+    ->using('deepseek', 'deepseek-chat')
+    ->withSchema($schema)
+    ->withPrompt('Review this PHP code: function add($a, $b) { return $a + $b; }')
+    ->asStructured();
+
+dump($response->structured);
+```
+
+## Tool Calling
+
+DeepSeek supports function calling with custom tools:
+
+```php
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Tool;
+
+$tools = [
+    Tool::as('search_docs')
+        ->for('Search Laravel documentation')
+        ->withStringParameter('query', 'Search query')
+        ->using(fn (string $query): string => "Documentation results for: {$query}"),
+        
+    Tool::as('run_code')
+        ->for('Execute PHP code in sandbox')
+        ->withStringParameter('code', 'PHP code to execute')
+        ->using(fn (string $code): string => "Executed: {$code}"),
+];
+
+$response = Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withTools($tools)
+    ->withMaxSteps(3)
+    ->withPrompt('Search for information about Laravel service containers')
+    ->asText();
+```
+
+## Use Cases
+
+DeepSeek excels at:
+
+### Code Generation
+
+```php
+$response = Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withPrompt('Generate a Laravel migration for a users table with email verification')
+    ->asText();
+```
+
+### Code Explanation
+
+```php
+$response = Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withPrompt('Explain this code: ' . $codeSnippet)
+    ->asText();
+```
+
+### Debugging
+
+```php
+$response = Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withPrompt('Debug this PHP error: ' . $errorMessage)
+    ->asText();
+```
+
+### Code Refactoring
+
+```php
+$response = Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withPrompt('Refactor this code to follow SOLID principles: ' . $oldCode)
+    ->asText();
+```
+
+## Limitations
+
+### Embeddings
+
+DeepSeek does not support embeddings. Use OpenAI, Gemini, or VoyageAI for embedding generation.
+
+### Tool Choice
+
+DeepSeek does not support tool choice / required tools.
+
+### Images
+
+DeepSeek does not support image inputs or generation. Use OpenAI, Anthropic, or Gemini for multimodal tasks.
+
+### Audio
+
+DeepSeek does not support audio processing. Use OpenAI, Groq, or Mistral for audio tasks.
+
+## Performance Tips
+
+### Temperature Settings
+
+For code generation, use lower temperatures for more deterministic output:
+
+```php
+$response = Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withTemperature(0.2)  // More deterministic
+    ->withPrompt('Generate a PHP class for user authentication')
+    ->asText();
+```
+
+### Context Management
+
+DeepSeek performs best with clear, well-structured prompts:
+
+```php
+$response = Prism::text()
+    ->using('deepseek', 'deepseek-chat')
+    ->withPrompt("
+        Task: Generate a PHP function
+        Requirements:
+        - Function name: calculateTotal
+        - Parameters: array of numbers
+        - Returns: sum of all numbers
+        - Include error handling
+        - Add PHPDoc comments
+    ")
+    ->asText();
+```

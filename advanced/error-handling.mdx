@@ -1,0 +1,434 @@
+---
+title: Error Handling
+description: Learn how to handle and recover from errors when working with LLM providers in Prism
+---
+
+# Error Handling
+
+Prism provides a comprehensive exception hierarchy to help you handle errors gracefully and implement retry logic, fallback strategies, and user-friendly error messages.
+
+## Exception Hierarchy
+
+All Prism exceptions extend from `PrismException`, which is the base exception class. This allows you to catch all Prism-related errors with a single catch block if needed.
+
+```php
+use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\Facades\Prism;
+
+try {
+    $response = Prism::text()
+        ->using('openai', 'gpt-4')
+        ->withPrompt('Hello')
+        ->asText();
+} catch (PrismException $e) {
+    // Handle any Prism error
+    Log::error('Prism error: ' . $e->getMessage());
+}
+```
+
+## Provider-Agnostic Exceptions
+
+These exceptions are thrown by Prism itself, regardless of which provider you're using.
+
+### PrismStructuredDecodingException
+
+Thrown when a provider returns invalid JSON for a structured output request.
+
+```php
+use Prism\Prism\Exceptions\PrismStructuredDecodingException;
+
+try {
+    $response = Prism::structured()
+        ->using('anthropic', 'claude-3-5-sonnet-20241022')
+        ->withPrompt('Generate user data')
+        ->withSchema($schema)
+        ->asStructured();
+} catch (PrismStructuredDecodingException $e) {
+    Log::error('Invalid JSON response from provider');
+    // Retry or use a fallback
+}
+```
+
+### PrismStreamDecodeException
+
+Thrown when there's an error decoding a streaming response.
+
+```php
+use Prism\Prism\Exceptions\PrismStreamDecodeException;
+
+try {
+    foreach (Prism::text()->using('openai', 'gpt-4')->withPrompt('Test')->asStream() as $event) {
+        // Process events
+    }
+} catch (PrismStreamDecodeException $e) {
+    Log::error('Stream decoding error: ' . $e->getMessage());
+}
+```
+
+## Provider Feedback Exceptions
+
+These exceptions are thrown based on the provider's response. Provider support is being rolled out incrementally, so not all providers throw all exception types yet.
+
+### PrismRateLimitedException
+
+Thrown when you exceed the provider's rate limits or quota.
+
+**Location:** `src/Exceptions/PrismRateLimitedException.php:9`
+
+```php
+use Prism\Prism\Exceptions\PrismRateLimitedException;
+
+try {
+    $response = Prism::text()
+        ->using('anthropic', 'claude-3-5-sonnet-20241022')
+        ->withPrompt('Hello')
+        ->asText();
+} catch (PrismRateLimitedException $e) {
+    // Get retry-after time in seconds
+    $retryAfter = $e->retryAfter; // int|null
+    
+    // Get detailed rate limit information
+    $rateLimits = $e->rateLimits; // array of ProviderRateLimit objects
+    
+    if ($retryAfter) {
+        Log::warning("Rate limited. Retry after {$retryAfter} seconds.");
+        sleep($retryAfter);
+        // Retry the request
+    }
+}
+```
+
+**Properties:**
+- `rateLimits` (array) - Array of `ProviderRateLimit` objects with details about which limits were hit
+- `retryAfter` (int|null) - Number of seconds to wait before retrying
+
+### PrismProviderOverloadedException
+
+Thrown when the provider is overloaded and cannot fulfill your request due to capacity issues.
+
+**Location:** `src/Exceptions/PrismProviderOverloadedException.php:9`
+
+```php
+use Prism\Prism\Exceptions\PrismProviderOverloadedException;
+
+try {
+    $response = Prism::text()
+        ->using('anthropic', 'claude-3-5-sonnet-20241022')
+        ->withPrompt('Hello')
+        ->asText();
+} catch (PrismProviderOverloadedException $e) {
+    Log::warning('Provider overloaded: ' . $e->getMessage());
+    // Try a different provider or retry later
+}
+```
+
+### PrismRequestTooLargeException
+
+Thrown when your request exceeds the provider's size limits (too many tokens, too large an image, etc.).
+
+**Location:** `src/Exceptions/PrismRequestTooLargeException.php:9`
+
+```php
+use Prism\Prism\Exceptions\PrismRequestTooLargeException;
+
+try {
+    $response = Prism::text()
+        ->using('openai', 'gpt-4')
+        ->withPrompt($veryLongPrompt)
+        ->asText();
+} catch (PrismRequestTooLargeException $e) {
+    Log::error('Request too large for provider');
+    // Truncate the prompt or split into smaller requests
+}
+```
+
+## PrismServer Exceptions
+
+When using PrismServer, you may encounter server-specific exceptions.
+
+### PrismServerException
+
+Thrown when there's an error with PrismServer operations.
+
+**Location:** `src/Exceptions/PrismServerException.php:10`
+
+```php
+use Prism\Prism\Exceptions\PrismServerException;
+
+try {
+    $prism = $server->prisms()->firstWhere('name', 'non-existent');
+    if (!$prism) {
+        throw PrismServerException::unresolvableModel('non-existent');
+    }
+} catch (PrismServerException $e) {
+    Log::error('PrismServer error: ' . $e->getMessage());
+}
+```
+
+## Practical Error Handling Patterns
+
+### Pattern 1: Retry with Exponential Backoff
+
+Handle rate limits and temporary failures with exponential backoff:
+
+```php
+use Prism\Prism\Exceptions\PrismRateLimitedException;
+use Prism\Prism\Exceptions\PrismProviderOverloadedException;
+use Prism\Prism\Facades\Prism;
+
+function generateTextWithRetry(string $prompt, int $maxAttempts = 3): string
+{
+    $attempt = 0;
+    $delay = 1; // Start with 1 second
+    
+    while ($attempt < $maxAttempts) {
+        try {
+            $response = Prism::text()
+                ->using('openai', 'gpt-4')
+                ->withPrompt($prompt)
+                ->asText();
+            
+            return $response->text;
+        } catch (PrismRateLimitedException $e) {
+            $attempt++;
+            $waitTime = $e->retryAfter ?? $delay;
+            
+            if ($attempt >= $maxAttempts) {
+                throw $e; // Re-throw on final attempt
+            }
+            
+            Log::warning("Rate limited. Retrying in {$waitTime} seconds. Attempt {$attempt}/{$maxAttempts}");
+            sleep($waitTime);
+            $delay *= 2; // Exponential backoff
+            
+        } catch (PrismProviderOverloadedException $e) {
+            $attempt++;
+            
+            if ($attempt >= $maxAttempts) {
+                throw $e;
+            }
+            
+            Log::warning("Provider overloaded. Retrying in {$delay} seconds. Attempt {$attempt}/{$maxAttempts}");
+            sleep($delay);
+            $delay *= 2;
+        }
+    }
+    
+    throw new \Exception('Max retry attempts reached');
+}
+```
+
+### Pattern 2: Multi-Provider Fallback
+
+Automatically fall back to alternative providers:
+
+```php
+use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\Facades\Prism;
+use Prism\Prism\Enums\Provider;
+
+function generateWithFallback(string $prompt): string
+{
+    $providers = [
+        ['provider' => Provider::Anthropic, 'model' => 'claude-3-5-sonnet-20241022'],
+        ['provider' => Provider::OpenAI, 'model' => 'gpt-4'],
+        ['provider' => Provider::Groq, 'model' => 'llama-3.1-70b-versatile'],
+    ];
+    
+    $lastException = null;
+    
+    foreach ($providers as $config) {
+        try {
+            $response = Prism::text()
+                ->using($config['provider'], $config['model'])
+                ->withPrompt($prompt)
+                ->asText();
+            
+            Log::info("Successfully generated text using {$config['provider']->value}");
+            return $response->text;
+            
+        } catch (PrismException $e) {
+            Log::warning("Provider {$config['provider']->value} failed: {$e->getMessage()}");
+            $lastException = $e;
+            continue;
+        }
+    }
+    
+    throw new \Exception('All providers failed', 0, $lastException);
+}
+```
+
+### Pattern 3: Graceful Degradation
+
+Provide fallback content when AI generation fails:
+
+```php
+use Prism\Prism\Exceptions\PrismException;
+use Prism\Prism\Facades\Prism;
+
+function generateSummaryWithFallback(string $content): string
+{
+    try {
+        $response = Prism::text()
+            ->using('openai', 'gpt-4o-mini')
+            ->withPrompt("Summarize this content: {$content}")
+            ->withMaxTokens(100)
+            ->asText();
+        
+        return $response->text;
+        
+    } catch (PrismException $e) {
+        Log::error('AI summary generation failed: ' . $e->getMessage());
+        
+        // Fallback to simple truncation
+        return Str::limit($content, 200) . ' [AI summary unavailable]';
+    }
+}
+```
+
+### Pattern 4: Request Size Validation
+
+Prevent "request too large" errors by validating before sending:
+
+```php
+use Prism\Prism\Exceptions\PrismRequestTooLargeException;
+use Prism\Prism\Facades\Prism;
+
+function generateFromLargeContent(string $content): string
+{
+    // Rough token estimation (4 characters ≈ 1 token)
+    $estimatedTokens = strlen($content) / 4;
+    $maxInputTokens = 100000; // Adjust per model
+    
+    if ($estimatedTokens > $maxInputTokens) {
+        // Split into chunks
+        $chunks = str_split($content, $maxInputTokens * 4);
+        $summaries = [];
+        
+        foreach ($chunks as $chunk) {
+            try {
+                $response = Prism::text()
+                    ->using('openai', 'gpt-4')
+                    ->withPrompt("Summarize: {$chunk}")
+                    ->asText();
+                
+                $summaries[] = $response->text;
+            } catch (PrismRequestTooLargeException $e) {
+                Log::error('Chunk still too large after splitting');
+                continue;
+            }
+        }
+        
+        // Combine summaries
+        return implode("\n\n", $summaries);
+    }
+    
+    // Content is small enough to process directly
+    $response = Prism::text()
+        ->using('openai', 'gpt-4')
+        ->withPrompt("Summarize: {$content}")
+        ->asText();
+    
+    return $response->text;
+}
+```
+
+### Pattern 5: User-Friendly Error Messages
+
+Convert technical exceptions into user-friendly messages:
+
+```php
+use Prism\Prism\Exceptions\PrismRateLimitedException;
+use Prism\Prism\Exceptions\PrismProviderOverloadedException;
+use Prism\Prism\Exceptions\PrismRequestTooLargeException;
+use Prism\Prism\Exceptions\PrismException;
+
+function getUserFriendlyErrorMessage(\Throwable $e): string
+{
+    return match (true) {
+        $e instanceof PrismRateLimitedException => 
+            'Our AI service is experiencing high demand. Please try again in a few moments.',
+        
+        $e instanceof PrismProviderOverloadedException => 
+            'The AI service is temporarily unavailable due to high load. Please try again shortly.',
+        
+        $e instanceof PrismRequestTooLargeException => 
+            'Your request is too large. Please try with a shorter input.',
+        
+        $e instanceof PrismException => 
+            'We encountered an error processing your request. Please try again.',
+        
+        default => 
+            'An unexpected error occurred. Please contact support if this persists.',
+    };
+}
+
+// Usage in a controller
+public function generate(Request $request)
+{
+    try {
+        $response = Prism::text()
+            ->using('openai', 'gpt-4')
+            ->withPrompt($request->input('prompt'))
+            ->asText();
+        
+        return response()->json(['text' => $response->text]);
+        
+    } catch (\Throwable $e) {
+        Log::error('Text generation failed', [
+            'error' => $e->getMessage(),
+            'user_id' => auth()->id(),
+        ]);
+        
+        return response()->json([
+            'error' => getUserFriendlyErrorMessage($e),
+        ], 500);
+    }
+}
+```
+
+## Exception Reference Table
+
+| Exception | Base Class | When Thrown | Provider Support |
+|-----------|------------|-------------|------------------|
+| `PrismException` | `Exception` | General Prism errors | All |
+| `PrismStructuredDecodingException` | `PrismException` | Invalid JSON in structured response | All |
+| `PrismStreamDecodeException` | `PrismException` | Error decoding stream | All |
+| `PrismRateLimitedException` | `PrismException` | Rate limit exceeded | Incremental |
+| `PrismProviderOverloadedException` | `PrismException` | Provider at capacity | Incremental |
+| `PrismRequestTooLargeException` | `PrismException` | Request size too large | Incremental |
+| `PrismServerException` | `Exception` | PrismServer errors | All |
+
+<Note>
+Provider support for specific exceptions is being rolled out incrementally. Check the [Prism documentation](https://github.com/echolabsdev/prism) for the latest provider compatibility information.
+</Note>
+
+## Contributing Exception Support
+
+Since provider-specific exception support is being rolled out incrementally, adding exception handling for a new provider makes a great first contribution to Prism.
+
+<Steps>
+  <Step title="Choose a provider">
+    Select a provider that doesn't yet have full exception support.
+  </Step>
+  
+  <Step title="Study the provider's API">
+    Read the provider's API documentation to understand their error codes and responses.
+  </Step>
+  
+  <Step title="Override handleRequestException()">
+    In the provider class, override the `handleRequestException()` method to map provider-specific error codes to Prism exceptions.
+  </Step>
+  
+  <Step title="Write tests">
+    Add tests that verify your exception handling works correctly.
+  </Step>
+  
+  <Step title="Submit a PR">
+    Open a pull request on GitHub with your changes.
+  </Step>
+</Steps>
+
+<Tip>
+Look at existing provider implementations like OpenAI or Anthropic to see examples of comprehensive error handling.
+</Tip>
