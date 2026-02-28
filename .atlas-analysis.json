@@ -1,0 +1,103 @@
+{
+  "projectType": "sdk-library",
+  "projectName": "Prism",
+  "projectDescription": "A unified interface for integrating Large Language Models into Laravel applications",
+  "theme": "palm",
+  "primaryColor": "#8B5CF6",
+  "lightColor": "#A78BFA",
+  "darkColor": "#6D28D9",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Getting Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart",
+              "configuration"
+            ]
+          },
+          {
+            "group": "Core Concepts",
+            "pages": [
+              "core-concepts/text-generation",
+              "core-concepts/structured-output",
+              "core-concepts/tools",
+              "core-concepts/streaming",
+              "core-concepts/messages",
+              "core-concepts/schemas"
+            ]
+          },
+          {
+            "group": "Multi-Modal",
+            "pages": [
+              "multi-modal/images",
+              "multi-modal/audio",
+              "multi-modal/embeddings",
+              "multi-modal/moderation"
+            ]
+          },
+          {
+            "group": "Advanced",
+            "pages": [
+              "advanced/testing",
+              "advanced/prism-server",
+              "advanced/custom-providers",
+              "advanced/error-handling",
+              "advanced/provider-interoperability"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Providers",
+        "groups": [
+          {
+            "group": "Supported Providers",
+            "pages": [
+              "providers/overview",
+              "providers/anthropic",
+              "providers/openai",
+              "providers/ollama",
+              "providers/mistral",
+              "providers/groq",
+              "providers/gemini",
+              "providers/deepseek",
+              "providers/xai",
+              "providers/openrouter",
+              "providers/elevenlabs",
+              "providers/voyageai"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "Unified interface for multiple LLM providers",
+    "Fluent text generation API",
+    "Structured output with schema validation",
+    "Tool integration for extending AI capabilities",
+    "Multi-modal support (text, images, audio)",
+    "Streaming responses",
+    "First-class testing support",
+    "Provider interoperability"
+  ],
+  "publicApiSurface": [
+    "Prism::text()",
+    "Prism::structured()",
+    "Prism::embeddings()",
+    "Prism::image()",
+    "Prism::audio()",
+    "Prism::moderation()",
+    "prism() helper",
+    "Tool class",
+    "Schema classes (StringSchema, NumberSchema, ObjectSchema, etc.)",
+    "Provider enum",
+    "PrismServer",
+    "Testing fakes and assertions"
+  ]
+}
